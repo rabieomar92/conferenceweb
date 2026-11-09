@@ -1181,3 +1181,37 @@ html[lang=ms] .dsteps b{font-size:14.5px;overflow-wrap:normal}
 .lang-m{display:none}
 @media(max-width:860px){.lang-m{display:inline-flex;margin-left:auto;margin-right:14px}.lang-m .n-lang{margin:0;font-size:15px}.top nav .n-lang{display:none}}
 @media(max-width:860px){.lang-m+.menu-btn{margin-left:0}}
+/* ── mobile menu: one language switch, equal buttons, a dimmed page behind that closes the menu ── */
+.lang-m{display:none}
+@media(max-width:980px){
+  .lang-m{display:inline-flex;margin-left:auto;margin-right:14px}.lang-m .n-lang{margin:0;font-size:15px}.lang-m+.menu-btn{margin-left:0}
+  .top nav a.n-lang{display:none!important}
+  .top nav .n-act{display:flex;align-items:stretch}
+  .top nav .n-act a,.top nav .n-act a.pill,.top nav .n-act form.lo,.top nav .n-act button.pill{flex:1 1 0;display:flex;align-items:center;justify-content:center;min-height:50px;padding:0 12px!important;margin:0;box-sizing:border-box;border-width:1px!important;font-size:17px;line-height:1.2}
+  .top nav .n-act form.lo button.pill{width:100%;height:100%}
+  html.menu-open body::after{content:"";position:fixed;inset:0;z-index:40;background:rgba(10,20,56,.28);animation:mfade .2s ease}
+  html.menu-open{overflow:hidden}
+  .top{z-index:50}
+}
+@keyframes mfade{from{opacity:0}}
+/* ── touch targets (phones): every tappable thing at least ~44px tall ── */
+@media(max-width:860px){
+  footer.f a{display:inline-flex;align-items:center;min-height:44px}
+  a.b2l,button.b2l{display:inline-flex;align-items:center;min-height:44px}
+  .pwshow,.pwtog{min-height:44px;min-width:56px;display:inline-flex;align-items:center;justify-content:center;font-size:13px!important}
+  .pwshow{bottom:0}
+  .faq summary,details>summary{min-height:44px}
+  .vn-meta a,.vn a[target=_blank]{display:inline-flex;align-items:center;min-height:44px}
+}
+/* sticky header never covers a heading you jump to */
+section[id],[id].dcard,[id].card,h2[id]{scroll-margin-top:96px}
+/* a button that has been pressed and is waiting for the server */
+.is-busy{opacity:.7;cursor:progress!important;pointer-events:none}
+/* header actions: Log in and Register share one height on every screen */
+.top nav .n-act a,.top nav .n-act button.pill{display:inline-flex;align-items:center;justify-content:center;min-height:46px;box-sizing:border-box;padding-top:0!important;padding-bottom:0!important}
+@media(max-width:860px){
+  .fld input:not([type=checkbox]):not([type=radio]),.fld select,.fld textarea,.adm input:not([type=checkbox]):not([type=radio]):not([type=file]){min-height:44px}
+  a.lnk,.vn a,.spk h3 a,.spk a.more,.vip a.more,.adm .b2,.adm a.b2{display:inline-flex;align-items:center;min-height:44px}
+  label.pc-sel{padding:12px;margin:-12px}
+}
+@media(max-width:860px){a[href*="google.com/maps"]{display:inline-block;padding:12px 4px;margin:-12px -4px}}
