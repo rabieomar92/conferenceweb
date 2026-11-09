@@ -1140,3 +1140,8 @@ html:not(.tabs-on) .dform{display:block}
   .hero .hstage{min-height:0;height:min(78vw,380px);align-self:auto}
   .hero h1{font-size:clamp(32px,8.6vw,48px)!important}
 }
+
+/* hero copy and logo: no pointer parallax (only the lattice reacts); cheaper logo intro */
+.hero .hcopy{transform:translate3d(0,calc(var(--p,0)*-80px),0)}
+.hero .mark{transform:translate3d(0,calc(var(--p,0)*-34px),0);transform-style:flat}
+@keyframes artIn{from{opacity:0;transform:scale(.94) translateY(16px)}to{opacity:1;transform:none}}
