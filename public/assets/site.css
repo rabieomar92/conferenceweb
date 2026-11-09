@@ -936,3 +936,28 @@ form.f,div.f,.paycard,.dcard,.chg,.evbox{background:#fff;border:1px solid var(--
 .lk-main .lk-g{fill:#F2A900;stroke:#F2A900}
 .lk-sub{stroke:#12285C;stroke-width:.7px;stroke-linejoin:round}
 .lk-pen{stroke:#12285C;stroke-width:1.1px;stroke-linejoin:round}
+
+/* wide School of Physics logo */
+.bl{gap:18px;margin-right:0}
+.bl .bl-s{height:38px;width:auto}
+.bl .bl-u{height:34px}
+.bl i{height:32px}
+.brand .lg{margin-left:4px}
+.meta .v img.org-logo{width:auto;height:48px;max-width:100%}
+.pgroup img.sp{height:56px}
+.pgroup img.us{height:46px}
+.pgroup .logos{gap:30px 34px}
+@media(max-width:1240px){.brand .lg{display:none}}
+@media(max-width:560px){
+  .brand .bl .bl-s{display:block;height:30px}
+  .brand .bl .bl-u,.brand .bl i{display:none}
+  .pgroup img.sp{height:46px}.pgroup img.us{height:38px}
+  .meta .v img.org-logo{height:40px}
+}
+.bl .bl-s{height:46px}
+.bl .bl-u{height:36px}
+.meta .v img.org-logo{height:64px}
+.pgroup img.sp{height:66px}
+.pgroup img.us{height:50px}
+@media(max-width:900px){.bl i{display:none}}
+@media(max-width:560px){.brand .bl .bl-s{height:34px}.meta .v img.org-logo{height:52px}.pgroup img.sp{height:54px}.pgroup img.us{height:42px}}
