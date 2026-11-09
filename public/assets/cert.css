@@ -1,0 +1,15 @@
+.cw{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 68px)}
+.side{border-right:1px solid var(--rule);background:#fff;padding:24px 0;overflow:auto;max-height:calc(100vh - 68px);position:sticky;top:68px}
+.side .it{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid #EFEBE3;padding:13px 24px;font:500 14.5px 'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;color:var(--navy);cursor:pointer}
+.side .it small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+.side .it.on{background:var(--paper-mid);box-shadow:inset 3px 0 var(--amber)}
+.main{padding:34px 40px}
+.tb{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:24px}
+.b2{background:#fff;color:var(--navy);border:1px solid var(--navy);padding:13px 22px;font:700 11px 'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;text-decoration:none}
+.b2.pri{background:var(--navy);color:#fff}.b2:disabled{opacity:.4}
+#prev{width:100%;max-width:1000px;border:1px solid var(--rule);box-shadow:0 24px 60px rgba(13,11,46,.14);background:#fff;display:block}
+#st{color:var(--muted);font-size:14px}
+.hint{max-width:1000px;color:var(--muted);font-size:13.5px;margin:-6px 0 18px}
+.side .it.more{text-align:center;color:var(--amber);font-weight:700}
+.b2.dng{border-color:#B91C1C;color:#B91C1C}
+@media(max-width:900px){.cw{grid-template-columns:1fr}.side{position:static;max-height:240px}.main{padding:22px}}

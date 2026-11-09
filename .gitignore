@@ -1,0 +1,5 @@
+node_modules
+data/*.sqlite*
+data/secret.txt
+data/speakers/
+.env
