@@ -15,6 +15,7 @@ const views = require('./lib/views');
 const adminViews = require('./lib/admin-views');
 const mail = require('./lib/mail');
 const stripe = require('./lib/stripe');
+const parts = require('./lib/participants');
 const { normaliseEmail, maskEmail } = require('./lib/util');
 
 process.on('uncaughtException', (e) => console.error('UNCAUGHT', e));
@@ -176,8 +177,9 @@ async function finishRegistration(req, res, d, email, key, method) {
   try {
     ref = newRef();
     const fee = (settings.feeOf(d.category) || {}).fee || '';
-    db.prepare("INSERT INTO registrations (ref,full_name,email,email_key,phone,organisation,category,country,created_at,ip_hash,method,fee,pay_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'unpaid')")
-      .run(ref, d.full_name, email, key, d.phone, d.organisation, d.category, d.country, new Date().toISOString(), ipHash(req), method, fee);
+    const now = new Date().toISOString();
+    db.prepare("INSERT INTO registrations (ref,full_name,email,email_key,phone,organisation,category,country,created_at,ip_hash,method,fee,pay_status,pw_hash,pw_set_at,salutation,designation,participation,paper_title) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'unpaid',?,?,?,?,?,?)")
+      .run(ref, d.full_name, email, key, d.phone, d.organisation, d.category, d.country, now, ipHash(req), method, fee, d.pw_hash || null, d.pw_hash ? now : null, d.salutation || '', d.designation || '', d.participation || '', d.paper_title || '');
     d.fee = fee;
   } catch (ex) { return /UNIQUE/.test(String(ex.message)) ? 'This email address is already registered. Sign in to your registration page to pay or check your status.' : 'Something went wrong. Please try again.'; }
   const id = db.prepare('SELECT id FROM registrations WHERE ref=?').get(ref).id;
@@ -202,7 +204,12 @@ router.post('/register', async (req, res) => {
     category: String(b.category || '').trim(),
     country: String(b.country || '').trim().slice(0, 60),
     consent: !!b.consent,
+    salutation: parts.SALUTATIONS.includes(b.salutation) ? b.salutation : '',
+    designation: String(b.designation || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120),
+    participation: parts.PARTICIPATION.includes(b.participation) ? b.participation : '',
+    paper_title: String(b.paper_title || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300),
   };
+  const pw = String(b.password || ''), pw2 = String(b.password2 || '');
   if (!csrfOk(req)) errors.push('Your session expired. Please try again.');
   if (b.website) errors.push('Submission rejected.');                                   // honeypot
   if (!g && !cfg.allowEmail) errors.push('Registration with an email code is switched off. Please continue with Google.');
@@ -233,10 +240,13 @@ router.post('/register', async (req, res) => {
   if (v.phone && !/^[0-9+()\-\s]{6,30}$/.test(v.phone)) errors.push('Please enter a valid phone number.');
   if (!v.organisation) errors.push('Please enter your institution or organisation.');
   if (!settings.availableFees().some((f) => f.name === v.category)) errors.push('Please choose your registration category.');
+  if (!v.participation) errors.push('Please say how you are taking part (oral, poster or non-presenting).');
+  { const pe = pw !== pw2 ? 'The two passwords do not match.' : speakers.checkPassword(pw, { email: v.email }); if (pe) errors.push(pe); }
   if (!v.consent) errors.push('Please agree to the use of your details for this event.');
 
   const key = normaliseEmail(v.email);
   if (!errors.length && db.prepare('SELECT 1 FROM registrations WHERE email_key=?').get(key)) errors.push('This email address is already registered.');
+  if (!errors.length) v.pw_hash = await bcrypt.hash(pw, 11);                   // only the hash is kept, even in the pending sign-up
   if (!errors.length && g) {                       // Google path: no email code needed
     const err = await finishRegistration(req, res, v, g.email, key, 'google');
     if (!err) { req.session.g = null; return; }
@@ -323,7 +333,33 @@ router.post('/register/cancel', (req, res) => {
 // ── participants: sign in with an emailed code (or Google), “My registration”, Ticket2U payment ──
 const currentReg = (req) => (req.session.pp ? db.prepare('SELECT * FROM registrations WHERE id=?').get(req.session.pp) : null);
 const requireReg = (req, res, next) => { const r = currentReg(req); if (!r) { req.session.pp = null; return res.redirect(cfg.base + '/login'); } req.reg = r; next(); };
+const ppSignIn = (req, res, r, welcome) => {
+  db.prepare('UPDATE registrations SET last_login=? WHERE id=?').run(new Date().toISOString(), r.id);
+  req.session = { pp: r.id, csrf: crypto.randomBytes(24).toString('hex') };              // fresh session on sign-in
+  if (welcome) flash(req, welcome);
+  res.redirect(cfg.base + '/account');
+};
+// password sign-in, like the speaker portal; the emailed code is only for a forgotten password
 const loginPage = (req, res, o = {}, status = 200) => { const info = req.session.gerr || ''; req.session.gerr = null; html(res, views.login({ csrf: csrfToken(req), googleOn: googleOn(), err: o.err || info, email: o.email || '', info: o.info || '' }), status); };
+router.get('/login', (req, res) => (currentReg(req) ? res.redirect(cfg.base + '/account') : loginPage(req, res, { email: String(req.query.email || '').slice(0, 160) })));
+router.post('/login', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160), password = String(req.body.password || '');
+  if (!csrfOk(req)) return loginPage(req, res, { err: 'Your session expired. Please try again.', email }, 400);
+  if (!EMAIL_RE.test(email) || !password) return loginPage(req, res, { err: 'Please enter your email address and password.', email }, 400);
+  const key = normaliseEmail(email), keys = ['ep:' + key, 'ip:' + ipHash(req)];
+  const wait = speakers.locked(keys);
+  if (wait) return loginPage(req, res, { err: `Too many unsuccessful attempts. Please wait ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''} or reset your password.`, email }, 429);
+  const r = db.prepare('SELECT * FROM registrations WHERE email_key=?').get(key);
+  const ok = await speakers.verifyPassword(r ? { pw_hash: r.pw_hash } : null, password);
+  if (!ok) {
+    speakers.fail(keys);
+    return loginPage(req, res, { err: r && !r.pw_hash ? 'You have not set a password yet. Use “Forgot or set password” below and we will email you a code.' : 'That email and password do not match. Check them, or use “Forgot or set password”.', email }, 401);
+  }
+  speakers.clearFails(['ep:' + key]);
+  ppSignIn(req, res, r);
+});
+// forgotten password: email a 6-digit code → enter it → choose a new password
+const forgotPage = (req, res, o = {}, status = 200) => html(res, views.forgot({ csrf: csrfToken(req), email: o.email || '', err: o.err || '' }), status);
 const codePage = (req, res, o = {}, status = 200) => { const l = req.session.pl; const row = l && db.prepare('SELECT last_sent FROM login_codes WHERE email_key=?').get(l.key); html(res, views.loginCode({ csrf: csrfToken(req), masked: l.masked, wait: Math.max(0, cfg.resendSeconds - (nowS() - (row ? row.last_sent : l.t))), ...o }), status); };
 async function sendLoginCode(req, key) {
   const r = db.prepare('SELECT full_name,email FROM registrations WHERE email_key=?').get(key), t = nowS();
@@ -335,20 +371,20 @@ async function sendLoginCode(req, key) {
   const m = mail.loginCodeEmail({ name: r.full_name, code });
   await mail.send({ to: r.email, subject: m.subject, text: m.text, html: m.html });
 }
-router.get('/login', (req, res) => (currentReg(req) ? res.redirect(cfg.base + '/account') : loginPage(req, res, { email: String(req.query.email || '').slice(0, 160) })));
-router.post('/login', async (req, res) => {
+router.get('/login/forgot', (req, res) => forgotPage(req, res, { email: String(req.query.email || '').slice(0, 160) }));
+router.post('/login/forgot', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);
-  if (!csrfOk(req)) return loginPage(req, res, { err: 'Your session expired. Please try again.', email }, 400);
-  if (!EMAIL_RE.test(email)) return loginPage(req, res, { err: 'Please enter a valid email address.', email }, 400);
+  if (!csrfOk(req)) return forgotPage(req, res, { err: 'Your session expired. Please try again.', email }, 400);
+  if (!EMAIL_RE.test(email)) return forgotPage(req, res, { err: 'Please enter a valid email address.', email }, 400);
   const key = normaliseEmail(email), lim = mailAllowed(req, key);
-  if (lim) return loginPage(req, res, { err: lim, email }, 429);
-  try { await sendLoginCode(req, key); } catch (ex) { console.error('Login code email failed:', ex.message); return loginPage(req, res, { err: 'We could not send the email just now. Please try again shortly, or contact ' + cfg.smtp.replyTo + '.', email }, 500); }
+  if (lim) return forgotPage(req, res, { err: lim, email }, 429);
+  try { await sendLoginCode(req, key); } catch (ex) { console.error('Reset code email failed:', ex.message); return forgotPage(req, res, { err: 'We could not send the email just now. Please try again shortly, or contact ' + cfg.smtp.replyTo + '.', email }, 500); }
   req.session.pl = { key, masked: maskEmail(email), t: nowS() };
   res.redirect(cfg.base + '/login/verify');
 });
-router.get('/login/verify', (req, res) => (req.session.pl ? codePage(req, res) : res.redirect(cfg.base + '/login')));
+router.get('/login/verify', (req, res) => (req.session.pl ? codePage(req, res) : res.redirect(cfg.base + '/login/forgot')));
 router.post('/login/verify', (req, res) => {
-  const l = req.session.pl; if (!l) return res.redirect(cfg.base + '/login');
+  const l = req.session.pl; if (!l) return res.redirect(cfg.base + '/login/forgot');
   if (!csrfOk(req)) return codePage(req, res, { err: 'Your session expired. Please try again.' }, 400);
   const row = db.prepare('SELECT * FROM login_codes WHERE email_key=?').get(l.key);
   const code = String(req.body.code || '').replace(/\D/g, '');
@@ -358,19 +394,30 @@ router.post('/login/verify', (req, res) => {
   db.prepare('DELETE FROM login_codes WHERE email_key=?').run(l.key);
   const r = db.prepare('SELECT id FROM registrations WHERE email_key=?').get(l.key);
   if (!r) return codePage(req, res, { err: 'No registration was found for this address.' }, 400);
-  db.prepare('UPDATE registrations SET last_login=? WHERE id=?').run(new Date().toISOString(), r.id);
-  req.session = { pp: r.id, csrf: crypto.randomBytes(24).toString('hex') };              // fresh session on sign-in
-  res.redirect(cfg.base + '/account');
+  req.session = { prs: { id: r.id, t: nowS() }, csrf: crypto.randomBytes(24).toString('hex') };   // the code only unlocks choosing a new password
+  res.redirect(cfg.base + '/login/reset');
 });
 router.post('/login/resend', async (req, res) => {
-  const l = req.session.pl; if (!l) return res.redirect(cfg.base + '/login');
+  const l = req.session.pl; if (!l) return res.redirect(cfg.base + '/login/forgot');
   if (!csrfOk(req)) return codePage(req, res, { err: 'Your session expired. Please try again.' }, 400);
   const lim = mailAllowed(req, l.key); if (lim) return codePage(req, res, { err: lim }, 429);
-  try { await sendLoginCode(req, l.key); } catch (ex) { console.error('Login code resend failed:', ex.message); return codePage(req, res, { err: 'We could not send the email. Please try again shortly.' }, 500); }
+  try { await sendLoginCode(req, l.key); } catch (ex) { console.error('Reset code resend failed:', ex.message); return codePage(req, res, { err: 'We could not send the email. Please try again shortly.' }, 500); }
   codePage(req, res, { info: 'A new code has been sent.' });
 });
+const ppReset = (req) => { const x = req.session.prs; return x && nowS() - x.t < 900 ? db.prepare('SELECT * FROM registrations WHERE id=?').get(x.id) : null; };
+router.get('/login/reset', (req, res) => (ppReset(req) ? html(res, views.resetPw({ csrf: csrfToken(req) })) : res.redirect(cfg.base + '/login/forgot')));
+router.post('/login/reset', async (req, res) => {
+  const r = ppReset(req); if (!r) return res.redirect(cfg.base + '/login/forgot');
+  const again = (err) => html(res, views.resetPw({ csrf: csrfToken(req), err }), 400);
+  if (!csrfOk(req)) return again('Your session expired. Please try again.');
+  const pw = String(req.body.password || ''), err = pw !== String(req.body.password2 || '') ? 'The two passwords do not match.' : speakers.checkPassword(pw, r);
+  if (err) return again(err);
+  db.prepare('UPDATE registrations SET pw_hash=?, pw_set_at=? WHERE id=?').run(await bcrypt.hash(pw, 11), new Date().toISOString(), r.id);
+  speakers.clearFails(['ep:' + r.email_key]);
+  ppSignIn(req, res, r, r.pw_hash ? 'Your password has been changed.' : 'Your password is set. Next time, sign in with your email and password.');
+});
 router.post('/logout', (req, res) => { req.session = null; res.redirect(cfg.base + '/login'); });
-router.get('/account', requireReg, (req, res) => { if (req.query.cancelled !== undefined) flash(req, '', 'Payment cancelled — nothing was charged. You can try again whenever you are ready.'); html(res, views.account({ r: req.reg, csrf: csrfToken(req), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined, modes: payModes(), stripeAmount: (() => { const p = stripe.parseFee(req.reg.fee); return p ? stripe.money(p.currency, p.amount) : ''; })() })); });
+router.get('/account', requireReg, (req, res) => { if (req.query.cancelled !== undefined) flash(req, '', 'Payment cancelled — nothing was charged. You can try again whenever you are ready.'); const pform = req.session.pform || null; req.session.pform = null; html(res, views.account({ pform, r: req.reg, csrf: csrfToken(req), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined, modes: payModes(), stripeAmount: (() => { const p = stripe.parseFee(req.reg.fee); return p ? stripe.money(p.currency, p.amount) : ''; })() })); });
 // Stripe: card / FPX / GrabPay through Stripe Checkout; confirmed by the webhook (and by the return page, in case the webhook is slow)
 const payModes = () => {
   const st = stripe.configured() && (cfg.payProvider === 'stripe' || cfg.payProvider === 'both');
@@ -424,6 +471,45 @@ router.post('/stripe/webhook', express.raw({ type: '*/*', limit: '1mb' }), (req,
     }
   } catch (ex) { console.error('Stripe webhook handling failed:', ex.message); return res.status(500).send('Error'); }   // Stripe retries
   res.json({ received: true });
+});
+router.post('/account/profile', requireReg, (req, res) => {
+  const r = req.reg, b = req.body || {};
+  if (!csrfOk(req)) { flash(req, '', 'Your session expired; your changes were not saved. Please try again.'); return res.redirect(cfg.base + '/account#profile'); }
+  const { v, errors } = parts.validate(b);
+  // name (printed on the certificate) is locked once a certificate has been issued
+  let name = r.full_name;
+  if (!r.cert_issued_at) { name = String(b.full_name || '').replace(/\s+/g, ' ').trim().slice(0, 120); if (name.length < 3) errors.push('Please enter your full name as it should appear on your certificate.'); }
+  let org = String(b.organisation || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 160);
+  const country = String(b.country || '').trim().slice(0, 60);
+  if (!inst.countrySet.has(country)) errors.push('Please choose your country from the list.');
+  { const hit = inst.lookup(org, country); if (hit) org = hit.name; else if (org.length < 3) errors.push('Please enter your institution or organisation.'); }
+  if (errors.length) { flash(req, '', errors); req.session.pform = b; return res.redirect(cfg.base + '/account#profile'); }
+  db.prepare('UPDATE registrations SET full_name=?, organisation=?, country=?, phone=?, salutation=?, designation=?, department=?, participation=?, paper_title=?, paper_id=?, mass_no=?, diet=?, diet_note=?, dinner=?, billing=?, profile_at=? WHERE id=?')
+    .run(name, org, country, v.phone, v.salutation, v.designation, v.department, v.participation, v.paper_title, v.paper_id, v.mass_no, v.diet, v.diet_note, v.dinner, v.billing, new Date().toISOString(), r.id);
+  flash(req, 'Your profile has been saved.');
+  res.redirect(cfg.base + '/account#profile');
+});
+router.post('/account/password', requireReg, async (req, res) => {
+  const r = req.reg, b = req.body || {};
+  if (!csrfOk(req)) { flash(req, '', 'Your session expired. Please try again.'); return res.redirect(cfg.base + '/account#password'); }
+  const errs = [];
+  if (r.pw_hash && !(await speakers.verifyPassword({ pw_hash: r.pw_hash }, String(b.current || '')))) errs.push('Your current password is not correct.');
+  const pw = String(b.password || ''); const pe = pw !== String(b.password2 || '') ? 'The two new passwords do not match.' : speakers.checkPassword(pw, r); if (pe) errs.push(pe);
+  if (errs.length) { flash(req, '', errs); return res.redirect(cfg.base + '/account#password'); }
+  db.prepare('UPDATE registrations SET pw_hash=?, pw_set_at=? WHERE id=?').run(await bcrypt.hash(pw, 11), new Date().toISOString(), r.id);
+  flash(req, 'Your password has been changed.'); res.redirect(cfg.base + '/account#password');
+});
+// certificate: drawn in the browser (same design as the organisers' batch page); the server only says whether it is available
+router.post('/account/certificate', requireReg, (req, res) => {
+  if (!csrfOk(req)) return res.status(400).json({ ok: false });
+  if (!parts.certReady(req.reg, cfg)) return res.status(403).json({ ok: false });
+  db.prepare('UPDATE registrations SET cert_issued_at=COALESCE(cert_issued_at, ?) WHERE id=?').run(new Date().toISOString(), req.reg.id);
+  res.json({ ok: true });
+});
+router.get('/account/signature', requireReg, (req, res) => {
+  const m = /^data:(image\/\w+);base64,(.+)$/.exec(cfg.signatureData || '');
+  if (!m || !parts.certReady(req.reg, cfg)) return res.status(404).end();
+  res.set({ 'Content-Type': m[1], 'Cache-Control': 'private, max-age=3600' }).send(Buffer.from(m[2], 'base64'));
 });
 router.post('/account/paid', requireReg, (req, res) => {
   const r = req.reg;
@@ -728,7 +814,7 @@ router.get('/admin', requireAdmin, (req, res) => {
   const total = where ? db.prepare(`SELECT COUNT(*) c FROM registrations ${where}`).get(...p).c : stats.total;
   const pages = Math.max(1, Math.ceil(total / f.per));
   const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
-  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
+  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,participation,pw_hash IS NOT NULL has_pw FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
   html(res, adminViews.dashboard({ rows, stats, total, page, pages, f, cats: CATS, statuses: STATUSES, pays: PAYS, pers: PERS, qs: filterQS(f), csrf: csrfToken(req), flash: takeFlash(req) }));
 });
 
@@ -787,10 +873,10 @@ router.get('/admin/certificates.json', requireAdmin, (req, res) => {
   let rows;
   if (Number.isInteger(after)) {                                   // keyset paging for batch download (stable while certificates get marked as issued)
     const w2 = where ? where + ' AND id > ?' : 'WHERE id > ?';
-    rows = db.prepare(`SELECT id,ref,full_name,organisation FROM registrations ${w2} ORDER BY id ASC LIMIT ?`).all(...p, after, limit);
+    rows = db.prepare(`SELECT id,ref,full_name,organisation,participation FROM registrations ${w2} ORDER BY id ASC LIMIT ?`).all(...p, after, limit);
   } else {
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
-    rows = db.prepare(`SELECT id,ref,full_name,organisation FROM registrations ${where} ORDER BY full_name COLLATE NOCASE ASC, id ASC LIMIT ? OFFSET ?`).all(...p, limit, offset);
+    rows = db.prepare(`SELECT id,ref,full_name,organisation,participation FROM registrations ${where} ORDER BY full_name COLLATE NOCASE ASC, id ASC LIMIT ? OFFSET ?`).all(...p, limit, offset);
   }
   res.set('Cache-Control', 'no-store').json({ total, rows });
 });
@@ -962,13 +1048,13 @@ router.get('/admin/export.csv', requireAdmin, (req, res) => {
   const { where, p } = adminFilter(req.query);
   const cell = (x) => { let s = String(x ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };   // CSV-injection safe
   res.type('text/csv; charset=utf-8').set('Content-Disposition', `attachment; filename="participants-${new Date().toISOString().slice(0, 10)}.csv"`);
-  res.write('﻿' + ['Reference', 'Full name', 'Email', 'Phone', 'Organisation', 'Category', 'Fee', 'Payment status', 'Ticket2U order', 'Amount paid', 'Paid at (UTC)', 'Country', 'Registered (UTC)', 'Attended', 'Certificate issued', 'Sign-up method'].map(cell).join(',') + '\r\n');
+  res.write('﻿' + ['Reference', 'Title', 'Full name', 'Email', 'Phone', 'Position', 'Department', 'Organisation', 'Participation', 'Paper title', 'Paper ID', 'MASS no.', 'Diet', 'Diet note', 'Dinner', 'Invoice to', 'Category', 'Fee', 'Payment status', 'Ticket2U order', 'Amount paid', 'Paid at (UTC)', 'Country', 'Registered (UTC)', 'Attended', 'Certificate issued', 'Sign-up method'].map(cell).join(',') + '\r\n');
   let after = 0;                                                    // stream in chunks so 100k rows never sit in memory at once
   for (;;) {
     const w2 = where ? where + ' AND id > ?' : 'WHERE id > ?';
-    const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at FROM registrations ${w2} ORDER BY id LIMIT 5000`).all(...p, after);
+    const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,salutation,designation,department,participation,paper_title,paper_id,mass_no,diet,diet_note,dinner,billing FROM registrations ${w2} ORDER BY id LIMIT 5000`).all(...p, after);
     if (!rows.length) break;
-    res.write(rows.map((r) => [r.ref, r.full_name, r.email, r.phone, r.organisation, r.category, r.fee, r.pay_status, r.pay_ref, r.pay_amount, r.paid_at, r.country, r.created_at, r.attended ? 'Yes' : 'No', r.cert_issued_at, r.method || 'email'].map(cell).join(',')).join('\r\n') + '\r\n');
+    res.write(rows.map((r) => [r.ref, r.salutation, r.full_name, r.email, r.phone, r.designation, r.department, r.organisation, r.participation, r.paper_title, r.paper_id, r.mass_no, r.diet, r.diet_note, r.dinner, r.billing, r.category, r.fee, r.pay_status, r.pay_ref, r.pay_amount, r.paid_at, r.country, r.created_at, r.attended ? 'Yes' : 'No', r.cert_issued_at, r.method || 'email'].map(cell).join(',')).join('\r\n') + '\r\n');
     after = rows[rows.length - 1].id;
   }
   res.end();

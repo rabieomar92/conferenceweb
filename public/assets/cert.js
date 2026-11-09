@@ -61,7 +61,8 @@ async function drawCert(p){
   if(String(p.organisation||'').trim())wrap(g,p.organisation,{size:16,c:MUTE},800,2).forEach((l,i,a)=>add(l,{size:16,c:MUTE,lh:22},0,i===a.length-1?14:0));
   else rows[rows.length-1].mb=14;
   rows.push({rule:1,mb:14,mt:0});
-  add('has participated in the',{size:15,c:MUTE,lh:20},0,0);
+  const role=/oral/i.test(p.participation||'')?'an oral presenter':/poster/i.test(p.participation||'')?'a poster presenter':'';
+  add(role?`has participated as ${role} in the`:'has participated in the',{size:15,c:MUTE,lh:20},0,0);
   wrap(g,C.full||C.event,{size:28,w:700,serif:1},900,2).forEach((l,i)=>add(l,{size:28,w:700,serif:1,c:NAVY,lh:35},i?0:6,0));
   if(String(C.sub||'').trim())wrap(g,C.sub,{size:15},820,2).forEach((l,i)=>add(l,{size:15,c:BODY,lh:21},i?0:4,0));
   wrap(g,`${C.date}  ·  ${C.venue}`,{size:14},900,2).forEach((l,i)=>add(l,{size:14,c:BODY,lh:20},i?0:8,0));
@@ -97,6 +98,8 @@ async function issue(ids){
   try{await fetch(B+'/admin/action',{method:'POST',body:b,credentials:'same-origin'})}catch(e){}
 }
 /* ── participants are loaded in small batches, so the list can hold 100k+ people ── */
+window.ICCert={render,pdfOf,fname};
+if(document.getElementById('list')){ // ── admin batch page only ──
 const PAGE=100, CH=100; let P=[], total=C.total;
 const listEl=document.getElementById('list');
 const more=document.createElement('button'); more.className='it more'; more.textContent='Load more…';
@@ -136,7 +139,7 @@ allbtn.onclick=async()=>{
       if(stop)break;
       st.textContent='Zipping part '+part+' / '+parts+'…';
       const blob=await z.generateAsync({type:'blob'}); const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob); a.download='certificates_QH2026_part-'+pad(part)+'-of-'+pad(parts)+'.zip'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+      a.href=URL.createObjectURL(blob); a.download='certificates_ICSSST2027_part-'+pad(part)+'-of-'+pad(parts)+'.zip'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
       await issue(rows.map(r=>r.id)); done+=rows.length; after=rows[rows.length-1].id;
       await new Promise(r=>setTimeout(r,700));
     }
@@ -145,3 +148,4 @@ allbtn.onclick=async()=>{
   stopbtn.hidden=true; allbtn.disabled=false;
 };
 (async()=>{try{addItems(await fetchRows('limit='+PAGE+'&offset=0'));if(P.length)show(0)}catch(e){st.textContent=e.message}})();
+}

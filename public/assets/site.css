@@ -556,3 +556,32 @@ details.alt{margin-top:26px;padding-top:20px;border-top:1px solid var(--rule)}de
 .top nav{gap:26px}.top nav a{white-space:nowrap}
 @media(max-width:1320px){.top nav{gap:20px}.top nav a{letter-spacing:.12em}.brand .lg-2{display:none}}
 @media(max-width:1060px){.top nav a[href$="#topics"],.top nav a[href$="#about"]{display:none}}
+
+/* ══ participant dashboard ══ */
+.pwbox{position:relative}.pwbox input{padding-right:64px!important}
+.pwshow{position:absolute;right:0;bottom:10px;background:none;border:0;cursor:pointer;font:700 10px 'TeX Gyre Pagella','Palatino Linotype',Palatino,Georgia,serif;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.pwshow:hover{color:var(--navy)}
+.two.t13{grid-template-columns:150px 1fr}
+.dnav{display:flex;flex-direction:column;margin-top:-6px;margin-bottom:6px;border-top:1px solid var(--rule)}
+.dnav a{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--rule);text-decoration:none;color:var(--navy);font-size:17px;transition:padding .2s}
+.dnav a:hover{padding-left:6px}
+.dnav b{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.dnav b.ok{color:#1F6B34}.dnav b.due{color:#9A3B00}.dnav b.chk{color:#7A5A00}
+.acct .facts{margin-top:26px}
+.dcard{background:#fff;border:1px solid var(--rule);padding:36px 44px;margin-top:22px;scroll-margin-top:90px}
+.paycard{scroll-margin-top:90px}
+.dhd{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px}
+.pct{font-size:15px;color:var(--muted)}.pct b{font-size:22px;color:var(--navy)}
+.pbar{height:6px;background:var(--paper-mid);margin-bottom:16px}.pbar i{display:block;height:100%;background:var(--amber-lt);transition:width .6s}
+.todo{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
+.todo li{font-size:13.5px;border:1px dashed #E3C77A;background:#FFFBEF;color:#7A5A00;padding:4px 10px}
+.pform{margin-top:8px}
+.pform h3{font-size:12px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;color:var(--navy);margin:34px 0 18px;padding-top:22px;border-top:1px solid var(--rule)}
+.pform h3:first-of-type{margin-top:6px;padding-top:0;border-top:0}
+.fld textarea{width:100%;border:1px solid var(--rule);background:transparent;padding:12px;font:400 17px 'TeX Gyre Pagella','Palatino Linotype',Palatino,Georgia,serif;color:var(--navy);outline:none;resize:vertical}
+.fld textarea:focus{border-color:var(--navy)}
+#certPrev{width:100%;margin-top:22px;border:1px solid var(--rule);box-shadow:0 14px 34px rgba(18,40,92,.12)}
+#certificate p{color:#46506A;font-size:16.5px;margin-bottom:18px}#certificate .mut{color:var(--muted)}
+#password details summary{cursor:pointer;color:var(--navy);font-weight:700}
+#password .pform{margin-top:20px}
+@media(max-width:900px){.dcard{padding:26px 20px}.two.t13{grid-template-columns:1fr}.acct aside{position:static}}
