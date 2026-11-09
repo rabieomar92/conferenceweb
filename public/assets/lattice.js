@@ -35,8 +35,8 @@
     var maxd = Math.hypot(NX, NY, NZ) / 2, seed = 7;
     function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
     for (var x = 0; x < NX; x++) for (var y = 0; y < NY; y++) for (var z = 0; z < NZ; z++) {
-      var hx = x - (NX - 1) / 2, hy = y - (NY - 1) / 2, hz = z - (NZ - 1) / 2, th = rnd() * 6.2832, ph = Math.acos(2 * rnd() - 1), rr = 7 + rnd() * 9;
-      idx[x + ',' + y + ',' + z] = A.push({ x: hx, y: hy, z: hz, g: (x + y + z) % 2 === 0, sx: Math.sin(ph) * Math.cos(th) * rr, sy: Math.sin(ph) * Math.sin(th) * rr, sz: Math.cos(ph) * rr, d: Math.hypot(hx, hy, hz) / maxd * .8 + rnd() * .35 }) - 1;
+      var hx = x - (NX - 1) / 2, hy = y - (NY - 1) / 2, hz = z - (NZ - 1) / 2, th = rnd() * 6.2832, ph = Math.acos(2 * rnd() - 1), rr = 5 + rnd() * 6;
+      idx[x + ',' + y + ',' + z] = A.push({ x: hx, y: hy, z: hz, g: (x + y + z) % 2 === 0, sx: Math.sin(ph) * Math.cos(th) * rr, sy: Math.sin(ph) * Math.sin(th) * rr, sz: Math.abs(Math.cos(ph)) * rr + 2, d: Math.hypot(hx, hy, hz) / maxd * .8 + rnd() * .35 }) - 1;
     }
     for (var k in idx) { var q = k.split(',').map(Number), a = idx[k]; [[1, 0, 0], [0, 1, 0], [0, 0, 1]].forEach(function (d) { var n = idx[(q[0] + d[0]) + ',' + (q[1] + d[1]) + ',' + (q[2] + d[2])]; if (n !== undefined) B.push([a, n]); }); }
   })();
@@ -77,10 +77,10 @@
   }
 
   function frame(now) {
-    raf = 0; if (!on || document.hidden) return;
+    raf = 0; if (!on || document.hidden || !ready) return;
     // once settled and nothing is moving, 30 fps is plenty; never spend more than needed
     var moving = Math.abs(progress() - p) > 0.0008 || px > -9e3, calm = !moving && now - t0 > 3200;
-    var budget = moving ? 15 : calm ? 48 : 31; if (lite > 1) budget = Math.max(budget, 31);
+    var intro = now - t0 < 3000, budget = moving || intro ? 15 : calm ? 48 : 31; if (lite > 1) budget = Math.max(budget, 31);
     if (!still && now - lastT < budget) { raf = requestAnimationFrame(frame); return; }
     var gap = lastT ? now - lastT : 16.7; lastT = now;
     fdt += (Math.min(gap, 120) - fdt) * 0.1;
@@ -110,13 +110,13 @@
       var al = clamp(u * 1.4) * smooth(2.2, 4.2, dz) * (1 - smooth(20, 34, dz)) * (0.12 + 0.88 * ep + 0.88 * (1 - ep) * smooth(0.42 * (1 - ep), 0.6 * (1 - ep) + 0.02, sx / W));
       if (stack) al *= 1 - smooth(textTop - 30, textTop, sy);   // never draw lattice over the copy
       if (al < (lite ? 0.07 : 0.01)) { q.f = 0; continue; }
-      q.f = 1; q.x = sx; q.y = sy; q.z = dz; q.r = Math.min(30, Math.max(1.1, 0.17 * f * (1 + near * 0.6))); q.a = al; q.n = near; vis.push(q);
+      q.f = 1; q.u = u; q.x = sx; q.y = sy; q.z = dz; q.r = Math.min(30, Math.max(1.1, 0.17 * f * (1 + near * 0.6))); q.a = al; q.n = near; vis.push(q);
     }
     // bonds, in three depth bands (one stroke each)
     g.lineWidth = 1; g.lineCap = 'butt';
     band[0].length = band[1].length = band[2].length = 0;
     for (i = 0; i < B.length; i += (lite ? 1 : 1)) {
-      var p1 = P[B[i][0]], p2 = P[B[i][1]]; if (!p1.f || !p2.f) continue;
+      var p1 = P[B[i][0]], p2 = P[B[i][1]]; if (!p1.f || !p2.f || p1.u < 0.96 || p2.u < 0.96) continue;
       var zz = (p1.z + p2.z) / 2; if (zz > 15 || (lite && zz > 9)) continue; band[zz > 15 ? 0 : zz > 9 ? 1 : 2].push(p1, p2);
     }
     for (var bi = 0; bi < 3; bi++) {
@@ -153,6 +153,12 @@
   hero.addEventListener('pointerleave', function () { px = py = -1e4; tx = ty = 0; if (still) kick(); });
   if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { on = es[0].isIntersecting; if (on) kick(); }).observe(hero);
   var rt; addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { measure(); kick(); }, 150); });
+  // start the intro only once the page has finished loading (fonts, images, layout), so it never competes with the browser's own work
+  var ready = still;
+  function go() { if (ready) return; ready = true; measure(); t0 = performance.now(); lastT = 0; kick(); }
+  function whenSettled() { var f = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve(); f.then(function () { requestAnimationFrame(function () { requestAnimationFrame(go); }); }); }
+  if (document.readyState === 'complete') whenSettled(); else addEventListener('load', whenSettled);
+  setTimeout(go, 2500);                                            // never wait longer than this
   addEventListener('load', function () { measure(); kick(); });
   addEventListener('scroll', function () { if (still) { p = progress(); kick(); } }, { passive: true });
   measure(); kick();
