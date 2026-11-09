@@ -21,13 +21,14 @@
   }
 
   // ── atom tints, computed once ──
+  // two colours from the logo, navy #16295E and gold #F2A900, as solid tints over paper #FBFAF7 (index 0..TN-1 navy, TN..2TN-1 gold)
   var TN = 7, TB = [], TINT = [];
-  for (var k0 = 0; k0 < TN; k0++) {                                 // solid tints of navy #16295E over paper #FBFAF7
-    var m0 = 0.14 + 0.86 * Math.pow((k0 + 1) / TN, 1.2);
-    TB.push([]); TINT.push('rgb(' + Math.round(251 + (22 - 251) * m0) + ',' + Math.round(250 + (41 - 250) * m0) + ',' + Math.round(247 + (94 - 247) * m0) + ')');
-  }
+  function mix(c, m) { return 'rgb(' + Math.round(251 + (c[0] - 251) * m) + ',' + Math.round(250 + (c[1] - 250) * m) + ',' + Math.round(247 + (c[2] - 247) * m) + ')'; }
+  [[22, 41, 94], [242, 169, 0]].forEach(function (c) {
+    for (var k0 = 0; k0 < TN; k0++) { TB.push([]); TINT.push(mix(c, 0.14 + 0.86 * Math.pow((k0 + 1) / TN, 1.2))); }
+  });
 
-  // ── the crystal (simple cubic grid, one colour) ──
+  // ── the crystal (rock-salt arrangement: gold and navy alternate on a cubic grid) ──
   var small = innerWidth < 760, NX = small ? 7 : 11, NY = small ? 6 : 8, NZ = small ? 6 : 8;
   var A = [], B = [], idx = {};
   (function () {
@@ -124,15 +125,15 @@
       g.stroke();
     }
     // flat, opaque, one hue: each atom is filled with a solid tint (paper → navy by depth and fade), one path per tint
-    for (k = 0; k < TN; k++) TB[k].length = 0;
+    for (k = 0; k < 2 * TN; k++) TB[k].length = 0;
     for (i = 0; i < vis.length; i++) {
       q = vis[i]; var tone = q.a * (0.5 + 0.5 * smooth(2, 12, 24 - q.z));
       if (q.x < -q.r || q.x > W + q.r || q.y < -q.r || q.y > H + q.r) continue;
-      TB[Math.min(TN - 1, Math.floor(tone * TN))].push(q);
+      TB[(q.g ? TN : 0) + Math.min(TN - 1, Math.floor(tone * TN))].push(q);
     }
-    for (k = 0; k < TN; k++) {
-      var bk = TB[k]; if (!bk.length) continue;
-      g.fillStyle = TINT[k]; g.beginPath();
+    for (k = 0; k < 2 * TN; k++) {                                    // faint to strong, navy and gold interleaved
+      var kk = (k >> 1) + (k & 1) * TN, bk = TB[kk]; if (!bk.length) continue;
+      g.fillStyle = TINT[kk]; g.beginPath();
       for (i = 0; i < bk.length; i++) { q = bk[i]; g.moveTo(q.x + q.r, q.y); g.arc(q.x, q.y, q.r, 0, 6.2832); }
       g.fill();
     }
