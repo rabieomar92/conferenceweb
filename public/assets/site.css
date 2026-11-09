@@ -1094,10 +1094,10 @@ html:not(.tabs-on) .dform{display:block}
 .hero .mark{transform:perspective(1100px) translate3d(calc(var(--mx,0)*18px),calc(var(--my,0)*10px - var(--p,0)*34px),0) rotateY(calc(var(--mx,0)*8deg)) rotateX(calc(var(--my,0)*-6deg)) scale(calc(1 + var(--p,0)*.32));opacity:min(1,calc(1.9 - var(--p,0)*2));will-change:transform,opacity;transform-style:preserve-3d}
 .lockup image{transform-box:fill-box;transform-origin:50% 60%;animation:artIn 1.8s cubic-bezier(.2,.7,.2,1) .25s both}
 @keyframes artIn{from{opacity:0;transform:scale(.9) translateY(22px);filter:blur(12px)}to{opacity:1;transform:none;filter:blur(0)}}
-.lk-main,.lk-sub,.lk-pen{transform-box:fill-box;animation:txtIn 1s cubic-bezier(.2,.7,.2,1) both}
-.lk-main{animation-delay:1s}.lk-sub{animation-delay:1.5s}.lk-pen{animation-delay:1.75s}
+.lk-main{transform-box:fill-box;animation:txtIn 1s cubic-bezier(.2,.7,.2,1) both}
+.lk-main{animation-delay:1s}
 @keyframes txtIn{from{opacity:0;transform:translateY(26px)}}
-.lk-gold{transform-box:fill-box;transform-origin:0 50%;animation:rule 1.2s cubic-bezier(.7,0,.2,1) 1.25s both}.lk-gold.g2{animation-delay:1.55s}
+.lk-gold{transform-box:fill-box;transform-origin:0 50%;animation:rule 1.2s cubic-bezier(.7,0,.2,1) 1.25s both}
 @keyframes rule{from{transform:scaleX(0)}}
 .lk-sheen{mix-blend-mode:soft-light;pointer-events:none;animation:sheen 1.7s cubic-bezier(.4,0,.2,1) 2.5s both}
 @keyframes sheen{from{transform:translateX(0) skewX(-18deg);opacity:1}90%{opacity:1}to{transform:translateX(1500px) skewX(-18deg);opacity:0}}
@@ -1106,7 +1106,7 @@ html:not(.tabs-on) .dform{display:block}
 @keyframes cue{0%{transform:translateY(0);opacity:0}25%{opacity:1}100%{transform:translateY(50px);opacity:0}}
 @media(max-width:860px){
   .hero .hgrid{grid-template-columns:1fr;gap:10px}.hscroll{display:none}
-  .hero .mark{order:-1;max-width:min(420px,86vw);justify-self:start}
+  .hero .mark{order:-1;max-width:min(420px,86vw);justify-self:center;padding:7vw 0 4vw}
   .hero-sun{left:62%;top:26%}
   .hero h1{font-size:clamp(32px,8.6vw,48px)!important}
 }

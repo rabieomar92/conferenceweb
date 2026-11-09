@@ -50,12 +50,16 @@
   function clamp(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
   function smooth(a, b, v) { var t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); }
 
+  var stack = false, textTop = 0;
   function measure() {
     var r = stick.getBoundingClientRect();
     dpr = Math.min(2, window.devicePixelRatio || 1); W = r.width; H = r.height;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25);
+    stack = innerWidth <= 860; textTop = H;
+    var hc = stick.querySelector('.hcopy'); if (stack && hc) textTop = Math.max(160, hc.getBoundingClientRect().top - r.top);
+    F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25); if (stack) F = Math.min(W * 1.0, textTop * 1.25);
     hh = header ? header.offsetHeight : 69;
     pin = !still && innerWidth > 860 && innerHeight >= 620;
     de.classList.toggle('hp-on', pin);
@@ -81,7 +85,7 @@
     var ep = p * p * (3 - 2 * p), D = 17 - 14.6 * ep;               // camera distance: flies into the crystal as you scroll
     var th = t * 0.09 + mx * 0.25 + ep * 1.5, ph = -0.34 + my * 0.12 + ep * 0.35;
     var cth = Math.cos(th), sth = Math.sin(th), cph = Math.cos(ph), sph = Math.sin(ph);
-    var cx0 = W * (W < 760 ? 0.62 : 0.7), cx = cx0 - ep * W * (W < 760 ? 0.12 : 0.2), cy = H * 0.5;
+    var cx0 = stack ? W * 0.5 : W * 0.7, cx = cx0 - (stack ? 0 : ep * W * 0.2), cy = stack ? textTop * 0.5 : H * 0.5;
     var zoomIn = 1 + ep * 0.2, wave = t * 1.1, maskA = 0.56 * (1 - ep), maskB = 0.2 * (1 - ep);
     var vis = [], i, a, q;
     for (i = 0; i < A.length; i++) {
@@ -95,6 +99,7 @@
       if (dd < 150) { near = 1 - dd / 150; push = near * near * 26 / (dd + 1); sx += dx * push; sy += dy * push; }
       var al = clamp(u * 1.4) * smooth(0.7, 1.7, dz) * (1 - smooth(20, 34, dz)) * (0.45 + 0.55 * smooth(maskB, maskA + 0.08, sx / W));
       if (W < 760) al *= 0.4;
+      if (stack) al *= 1 - smooth(textTop - 70, textTop - 6, sy);   // never draw lattice over the copy
       var ex = (sx - cx0) / (W * 0.26), ey = (sy - cy) / (H * 0.3), ed = Math.sqrt(ex * ex + ey * ey);
       al *= 1 - (1 - 0.18 - 0.82 * smooth(0.55, 1.25, ed)) * (1 - ep) * (W < 760 ? 0 : 1);   // a clear pool of paper behind the logo, filling in as the camera dives
       if (al < 0.01) { q.f = 0; continue; }
