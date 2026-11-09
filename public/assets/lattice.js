@@ -43,7 +43,7 @@
 
   var W = 0, H = 0, dpr = 1, F = 600, raf = 0, on = true, t0 = performance.now();
   var mx = 0, my = 0, tx = 0, ty = 0, px = -1e4, py = -1e4, p = 0, pin = false, runway = 1, y0 = 0, hh = 69;
-  var lp = '', lx = '', ly = '', lsx = '', lsy = '', lastT = 0, vis = [], band = [[], [], []];
+  var ema = 8, lite = 0, lastDraw = 0, lp = '', lx = '', ly = '', lsx = '', lsy = '', lastT = 0, vis = [], band = [[], [], []];
   var P = new Array(A.length);
   for (var n0 = 0; n0 < A.length; n0++) P[n0] = { x: 0, y: 0, f: 0, z: 0, r: 0, a: 0, g: A[n0].g, i: n0 };
 
@@ -51,16 +51,18 @@
   function clamp(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
   function smooth(a, b, v) { var t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); }
 
-  var stack = false, textTop = 0;
+  var stack = false, textTop = 0, scx = 0, scy = 0, sw = 0, sh = 0;
   function measure() {
     var r = stick.getBoundingClientRect();
-    dpr = Math.min(innerWidth < 760 ? 1.5 : 1.25, window.devicePixelRatio || 1); W = r.width; H = r.height;
+    dpr = Math.min(innerWidth < 760 ? 1.25 : 1, window.devicePixelRatio || 1); W = r.width; H = r.height;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25);
     stack = innerWidth <= 860; textTop = H;
-    var hc = stick.querySelector('.hcopy'); if (stack && hc) textTop = Math.max(160, hc.getBoundingClientRect().top - r.top);
-    F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25); if (stack) F = Math.min(W * 1.1, textTop * 1.5);
+    var st = stick.querySelector('.hstage'), sr = st ? st.getBoundingClientRect() : null;
+    if (sr && sr.width) { sw = sr.width; sh = sr.height; scx = sr.left - r.left + sw / 2; scy = sr.top - r.top + sh / 2; if (stack) textTop = sr.bottom - r.top + 6; }
+    else { sw = W * 0.5; sh = H * 0.8; scx = W * 0.7; scy = H * 0.5; }
+    F = stack ? Math.min(sw * 1.5, sh * 1.8) : Math.min(W * 0.62, H * 1.25);
     hh = header ? header.offsetHeight : 69;
     pin = !still && innerWidth > 860 && innerHeight >= 620;
     de.classList.toggle('hp-on', pin);
@@ -78,7 +80,8 @@
     raf = 0; if (!on || document.hidden) return;
     // once settled and nothing is moving, 30 fps is plenty; never spend more than needed
     var calm = now - t0 > 3200 && Math.abs(progress() - p) < 0.0008 && px < -9e3;
-    if (!still && calm && now - lastT < 30) { raf = requestAnimationFrame(frame); return; }
+    if (!still && (calm || lite > 1) && now - lastT < (lite > 1 ? 40 : 30)) { raf = requestAnimationFrame(frame); return; }
+    var fs = performance.now();
     lastT = now;
     var t = still ? 99 : (now - t0) / 1000;
     p += (progress() - p) * (still ? 1 : 0.14);                    // eased, so the camera never jerks
@@ -92,7 +95,7 @@
     var ep = p * p * (3 - 2 * p), D = 17 - 14.6 * ep;               // camera distance: flies into the crystal as you scroll
     var th = t * 0.09 + mx * 0.25 + ep * 1.5, ph = -0.34 + my * 0.12 + ep * 0.35;
     var cth = Math.cos(th), sth = Math.sin(th), cph = Math.cos(ph), sph = Math.sin(ph);
-    var cx0 = stack ? W * 0.5 : W * 0.7, cx = cx0 - (stack ? 0 : ep * W * 0.2), cy = stack ? textTop * 0.5 : H * 0.5;
+    var cx0 = scx, cx = cx0, cy = scy;
     var zoomIn = 1 + ep * 0.2, wave = t * 1.1, maskA = 0.56 * (1 - ep), maskB = 0.2 * (1 - ep);
     var i, a, q; vis.length = 0;
     for (i = 0; i < A.length; i++) {
@@ -104,21 +107,18 @@
       var f = F * zoomIn / dz, sx = cx + x1 * f, sy = cy + y1 * f;
       var dx = sx - px, dy = sy - py, dd = Math.hypot(dx, dy), push = 0, near = 0;
       if (dd < 150) { near = 1 - dd / 150; push = near * near * 26 / (dd + 1); sx += dx * push; sy += dy * push; }
-      var al = clamp(u * 1.4) * smooth(2.2, 4.2, dz) * (1 - smooth(20, 34, dz)) * (0.45 + 0.55 * smooth(maskB, maskA + 0.08, sx / W));
-      if (W < 760) al *= 0.8;
-      if (stack) al *= 1 - smooth(textTop - 40, textTop - 4, sy);   // never draw lattice over the copy
-      var ex = (sx - cx0) / (W * 0.27), ey = (sy - cy) / (H * 0.32), ed = Math.sqrt(ex * ex + ey * ey);
-      al *= 1 - (1 - 0.07 - 0.93 * smooth(0.6, 1.3, ed)) * (1 - ep) * (W < 760 ? 0 : 1);   // a clear pool of paper behind the logo, filling in as the camera dives
-      if (al < 0.01) { q.f = 0; continue; }
+      var al = clamp(u * 1.4) * smooth(2.2, 4.2, dz) * (1 - smooth(20, 34, dz)) * (0.12 + 0.88 * ep + 0.88 * (1 - ep) * smooth(0.42 * (1 - ep), 0.6 * (1 - ep) + 0.02, sx / W));
+      if (stack) al *= 1 - smooth(textTop - 30, textTop, sy);   // never draw lattice over the copy
+      if (al < (lite ? 0.07 : 0.01)) { q.f = 0; continue; }
       q.f = 1; q.x = sx; q.y = sy; q.z = dz; q.r = Math.min(46, Math.max(1.1, 0.17 * f * (1 + near * 0.6))); q.a = al; q.n = near; vis.push(q);
     }
     vis.sort(function (m, n) { return n.z - m.z; });                // far to near
     // bonds, in three depth bands (one stroke each)
     g.lineWidth = Math.max(0.8, F / 560); g.lineCap = 'round';
     band[0].length = band[1].length = band[2].length = 0;
-    for (i = 0; i < B.length; i++) {
+    for (i = 0; i < B.length; i += (lite ? 1 : 1)) {
       var p1 = P[B[i][0]], p2 = P[B[i][1]]; if (!p1.f || !p2.f) continue;
-      var zz = (p1.z + p2.z) / 2; band[zz > 15 ? 0 : zz > 9 ? 1 : 2].push(p1, p2);
+      var zz = (p1.z + p2.z) / 2; if (lite && zz > 15) continue; band[zz > 15 ? 0 : zz > 9 ? 1 : 2].push(p1, p2);
     }
     for (var bi = 0; bi < 3; bi++) {
       g.strokeStyle = 'rgba(24,40,92,' + [0.10, 0.17, 0.28][bi] * (bi === 2 ? 1 - ep * 0.4 : 1) + ')'; g.beginPath();
@@ -131,6 +131,9 @@
       var r = q.r; g.drawImage(q.g ? GOLD : NAVY, q.x - r, q.y - r, r * 2, r * 2);
     }
     g.globalAlpha = 1;
+    // quality governor: if this device spends too long drawing, shed detail (the intro itself stays as designed)
+    ema += (performance.now() - fs - ema) * 0.08;
+    if (!still && now - t0 > 2600) { if (ema > 9 && lite < 2) { lite++; ema = 5; } }
     if (!still) raf = requestAnimationFrame(frame);
   }
   document.addEventListener('visibilitychange', function () { if (!document.hidden) kick(); });

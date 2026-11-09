@@ -1126,3 +1126,17 @@ html:not(.tabs-on) .dform{display:block}
 .tlist li{text-wrap:wrap}
 .top .brand,.top .brand .bl,.top .brand .bl img,.top .brand .lg{flex:none}
 .top .brand .lg{white-space:nowrap}
+
+/* logo sits in the copy column; the crystal has its own stage */
+.hero .hgrid{grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);grid-template-areas:"mark stage" "copy stage";grid-template-rows:auto auto;align-content:center;row-gap:clamp(12px,2.4vh,26px)}
+.hero .mark{grid-area:mark;width:clamp(210px,21vw,300px);justify-self:start;align-self:end;padding:0;order:0}
+.hero .mark::before{display:none}
+.hero .hcopy{grid-area:copy;align-self:start}
+.hero .hstage{grid-area:stage;align-self:stretch;min-height:min(62vh,560px)}
+.hero h1{font-size:clamp(34px,min(4.3vw,7.6vh),68px)!important}
+@media(max-width:860px){
+  .hero .hgrid{grid-template-columns:1fr;grid-template-areas:"mark" "stage" "copy";row-gap:0}
+  .hero .mark{width:min(300px,72vw);justify-self:start;margin-top:6px}
+  .hero .hstage{min-height:0;height:min(78vw,380px);align-self:auto}
+  .hero h1{font-size:clamp(32px,8.6vw,48px)!important}
+}
