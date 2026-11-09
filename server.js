@@ -417,7 +417,7 @@ router.post('/login/reset', async (req, res) => {
   ppSignIn(req, res, r, r.pw_hash ? 'Your password has been changed.' : 'Your password is set. Next time, sign in with your email and password.');
 });
 router.post('/logout', (req, res) => { req.session = null; res.redirect(cfg.base + '/login'); });
-router.get('/account', requireReg, (req, res) => { if (req.query.cancelled !== undefined) flash(req, '', 'Payment cancelled — nothing was charged. You can try again whenever you are ready.'); const pform = req.session.pform || null; req.session.pform = null; html(res, views.account({ pform, r: req.reg, csrf: csrfToken(req), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined, modes: payModes(), stripeAmount: (() => { const p = stripe.parseFee(req.reg.fee); return p ? stripe.money(p.currency, p.amount) : ''; })() })); });
+router.get('/account', requireReg, (req, res) => { if (req.query.cancelled !== undefined) flash(req, '', 'Payment cancelled — nothing was charged. You can try again whenever you are ready.'); const pform = req.session.pform || null; req.session.pform = null; const prform = req.session.prform || null; req.session.prform = null; html(res, views.account({ pform, prform, r: req.reg, csrf: csrfToken(req), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined, modes: payModes(), stripeAmount: (() => { const p = stripe.parseFee(req.reg.fee); return p ? stripe.money(p.currency, p.amount) : ''; })() })); });
 // Stripe: card / FPX / GrabPay through Stripe Checkout; confirmed by the webhook (and by the return page, in case the webhook is slow)
 const payModes = () => {
   const st = stripe.configured() && (cfg.payProvider === 'stripe' || cfg.payProvider === 'both');
@@ -496,10 +496,19 @@ router.post('/account/profile', requireReg, (req, res) => {
   if (!inst.countrySet.has(country)) errors.push('Please choose your country from the list.');
   { const hit = inst.lookup(org, country); if (hit) org = hit.name; else if (org.length < 3) errors.push('Please enter your institution or organisation.'); }
   if (errors.length) { flash(req, '', errors); req.session.pform = b; return res.redirect(cfg.base + '/account#profile'); }
-  db.prepare('UPDATE registrations SET full_name=?, organisation=?, country=?, phone=?, salutation=?, designation=?, department=?, participation=?, paper_title=?, paper_id=?, mass_no=?, diet=?, diet_note=?, dinner=?, billing=?, profile_at=? WHERE id=?')
-    .run(name, org, country, v.phone, v.salutation, v.designation, v.department, v.participation, v.paper_title, v.paper_id, v.mass_no, v.diet, v.diet_note, v.dinner, v.billing, new Date().toISOString(), r.id);
+  db.prepare('UPDATE registrations SET full_name=?, organisation=?, country=?, phone=?, salutation=?, designation=?, department=?, participation=?, mass_no=?, diet=?, diet_note=?, dinner=?, billing=?, profile_at=? WHERE id=?')
+    .run(name, org, country, v.phone, v.salutation, v.designation, v.department, v.participation, v.mass_no, v.diet, v.diet_note, v.dinner, v.billing, new Date().toISOString(), r.id);
   flash(req, 'Your profile has been saved.');
   res.redirect(cfg.base + '/account#profile');
+});
+router.post('/account/presentation', requireReg, (req, res) => {
+  const r = req.reg, b = req.body || {};
+  if (!csrfOk(req)) { flash(req, '', 'Your session expired; your changes were not saved. Please try again.'); return res.redirect(cfg.base + '/account#presentation'); }
+  if (!parts.presenting(r)) { flash(req, '', 'Choose “Oral presentation” or “Poster presentation” in your profile first.'); return res.redirect(cfg.base + '/account#profile'); }
+  const { v, errors } = parts.validatePresentation(b);
+  if (errors.length) { flash(req, '', errors); req.session.prform = b; return res.redirect(cfg.base + '/account#presentation'); }
+  db.prepare('UPDATE registrations SET paper_title=?, paper_id=?, coauthors=?, abstract=?, pres_at=? WHERE id=?').run(v.paper_title, v.paper_id, v.coauthors, v.abstract, new Date().toISOString(), r.id);
+  flash(req, 'Your presentation details have been saved.'); res.redirect(cfg.base + '/account#presentation');
 });
 router.post('/account/password', requireReg, async (req, res) => {
   const r = req.reg, b = req.body || {};
@@ -661,6 +670,14 @@ router.post('/speaker/invite/:token/decline', (req, res) => {
 });
 router.post('/speaker/logout', (req, res) => { req.session = null; res.redirect(cfg.base + '/speaker/login'); });
 router.get('/speaker', requireSpeaker, (req, res) => html(res, spv.portal({ s: req.spk, csrf: csrfToken(req), flash: takeFlash(req) })));
+router.get('/speaker/calendar.ics', requireSpeaker, (req, res) => {
+  const s = req.spk;
+  if (!speakers.hasSlot(s)) return res.redirect(cfg.base + '/speaker');
+  const at = (t) => new Date(Date.parse(`${s.slot_date}T${t}:00+08:00`)).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const end = s.slot_end ? at(s.slot_end) : new Date(Date.parse(`${s.slot_date}T${s.slot_start}:00+08:00`) + 45 * 60000).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const esc = (x) => String(x).replace(/[\\;,]/g, '\\$&').replace(/\n/g, '\\n');
+  res.set({ 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'attachment; filename="icssst-2027-my-talk.ics"' }).send(['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ICSSST 2027//Speaker//EN', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT', `UID:speaker-${s.id}@${new URL(views.SITE).hostname}`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')}`, `DTSTART:${at(s.slot_start)}`, `DTEND:${end}`, `SUMMARY:${esc((s.talk_title ? s.talk_title + ' — ' : '') + cfg.eventName + ' (' + s.role + ')')}`, `LOCATION:${esc([cfg.eventVenue, cfg.venueAddress].filter(Boolean).join(', '))}`, `DESCRIPTION:${esc(s.full_name + '. ' + views.SITE)}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n');
+});
 router.post('/speaker', requireSpeaker, (req, res) => {
   if (!csrfOk(req)) { flash(req, '', 'Your session expired; your changes were not saved. Please try again.'); return res.redirect(cfg.base + '/speaker'); }
   const { v, errors } = speakers.validate(req.body || {});
@@ -1060,13 +1077,13 @@ router.get('/admin/export.csv', requireAdmin, (req, res) => {
   const { where, p } = adminFilter(req.query);
   const cell = (x) => { let s = String(x ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };   // CSV-injection safe
   res.type('text/csv; charset=utf-8').set('Content-Disposition', `attachment; filename="participants-${new Date().toISOString().slice(0, 10)}.csv"`);
-  res.write('﻿' + ['Reference', 'Title', 'Full name', 'Email', 'Phone', 'Position', 'Department', 'Organisation', 'Participation', 'Paper title', 'Paper ID', 'MASS no.', 'Diet', 'Diet note', 'Dinner', 'Invoice to', 'Category', 'Fee', 'Payment status', 'Ticket2U order', 'Amount paid', 'Paid at (UTC)', 'Country', 'Registered (UTC)', 'Attended', 'Certificate issued', 'Sign-up method'].map(cell).join(',') + '\r\n');
+  res.write('﻿' + ['Reference', 'Title', 'Full name', 'Email', 'Phone', 'Position', 'Department', 'Organisation', 'Participation', 'Paper title', 'Paper ID', 'Authors', 'Abstract', 'MASS no.', 'Diet', 'Diet note', 'Dinner', 'Invoice to', 'Category', 'Fee', 'Payment status', 'Ticket2U order', 'Amount paid', 'Paid at (UTC)', 'Country', 'Registered (UTC)', 'Attended', 'Certificate issued', 'Sign-up method'].map(cell).join(',') + '\r\n');
   let after = 0;                                                    // stream in chunks so 100k rows never sit in memory at once
   for (;;) {
     const w2 = where ? where + ' AND id > ?' : 'WHERE id > ?';
-    const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,salutation,designation,department,participation,paper_title,paper_id,mass_no,diet,diet_note,dinner,billing FROM registrations ${w2} ORDER BY id LIMIT 5000`).all(...p, after);
+    const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,salutation,designation,department,participation,paper_title,paper_id,coauthors,abstract,mass_no,diet,diet_note,dinner,billing FROM registrations ${w2} ORDER BY id LIMIT 5000`).all(...p, after);
     if (!rows.length) break;
-    res.write(rows.map((r) => [r.ref, r.salutation, r.full_name, r.email, r.phone, r.designation, r.department, r.organisation, r.participation, r.paper_title, r.paper_id, r.mass_no, r.diet, r.diet_note, r.dinner, r.billing, r.category, r.fee, r.pay_status, r.pay_ref, r.pay_amount, r.paid_at, r.country, r.created_at, r.attended ? 'Yes' : 'No', r.cert_issued_at, r.method || 'email'].map(cell).join(',')).join('\r\n') + '\r\n');
+    res.write(rows.map((r) => [r.ref, r.salutation, r.full_name, r.email, r.phone, r.designation, r.department, r.organisation, r.participation, r.paper_title, r.paper_id, r.coauthors, r.abstract, r.mass_no, r.diet, r.diet_note, r.dinner, r.billing, r.category, r.fee, r.pay_status, r.pay_ref, r.pay_amount, r.paid_at, r.country, r.created_at, r.attended ? 'Yes' : 'No', r.cert_issued_at, r.method || 'email'].map(cell).join(',')).join('\r\n') + '\r\n');
     after = rows[rows.length - 1].id;
   }
   res.end();

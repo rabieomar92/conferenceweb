@@ -6,8 +6,8 @@
     var out = d.querySelector('.cnt[data-for="' + t.id + '"]'), max = +t.getAttribute('data-count') || t.maxLength;
     function upd() { var n = t.value.length, w = t.value.trim() ? t.value.trim().split(/\s+/).length : 0; if (out) { out.textContent = w + ' words · ' + n.toLocaleString() + ' / ' + max.toLocaleString(); out.classList.toggle('bad', n > max * 0.95); } }
     t.addEventListener('input', upd); upd();
-    function grow() { t.style.height = 'auto'; t.style.height = Math.min(900, t.scrollHeight + 2) + 'px'; }
-    t.addEventListener('input', grow); grow();
+    function grow() { if (!t.offsetParent) return; t.style.height = 'auto'; t.style.height = Math.min(900, t.scrollHeight + 2) + 'px'; }
+    t.addEventListener('input', grow); d.addEventListener('tabshow', grow); grow();
   });
   // unsaved changes
   var f = d.querySelector('form[data-guard]'), dirty = false, st = f && f.querySelector('.savebar .state');
