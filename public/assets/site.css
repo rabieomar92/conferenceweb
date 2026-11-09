@@ -1119,3 +1119,10 @@ html:not(.tabs-on) .dform{display:block}
 .hero .mark{--x:0}
 .lk-gold,.hscroll{display:none!important}
 @media(max-width:860px){.hero .mark::before{inset:0 -2%;background:radial-gradient(closest-side,rgba(251,250,247,.55) 50%,rgba(251,250,247,0))}}
+
+/* header breathing room + topics wrap */
+.top .brand{margin-right:30px}
+@media(max-width:1180px){.top .brand .lg{display:none}.top .brand{margin-right:18px}}
+.tlist li{text-wrap:wrap}
+.top .brand,.top .brand .bl,.top .brand .bl img,.top .brand .lg{flex:none}
+.top .brand .lg{white-space:nowrap}

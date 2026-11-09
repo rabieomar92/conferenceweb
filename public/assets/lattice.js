@@ -22,14 +22,14 @@
 
   // ── solid spheres, drawn once ──
   function sprite(c0, c1, c2) {
-    var s = document.createElement('canvas'); s.width = s.height = 96; var x = s.getContext('2d');
-    var r = x.createRadialGradient(36, 32, 4, 48, 48, 46); r.addColorStop(0, c0); r.addColorStop(.45, c1); r.addColorStop(1, c2);
-    x.fillStyle = r; x.beginPath(); x.arc(48, 48, 46, 0, 6.2832); x.fill(); return s;
+    var s = document.createElement('canvas'); s.width = s.height = 64; var x = s.getContext('2d');
+    var r = x.createRadialGradient(24, 21, 3, 32, 32, 31); r.addColorStop(0, c0); r.addColorStop(.45, c1); r.addColorStop(1, c2);
+    x.fillStyle = r; x.beginPath(); x.arc(32, 32, 31, 0, 6.2832); x.fill(); return s;
   }
   var GOLD = sprite('#FFF0B8', '#F6B400', '#A96A00'), NAVY = sprite('#7C93D6', '#1D3480', '#0A1438');
 
   // ── the crystal (rock-salt arrangement: gold and navy alternate on a cubic grid) ──
-  var small = innerWidth < 760, NX = small ? 9 : 13, NY = small ? 7 : 9, NZ = small ? 7 : 9;
+  var small = innerWidth < 760, NX = small ? 7 : 11, NY = small ? 6 : 8, NZ = small ? 6 : 8;
   var A = [], B = [], idx = {};
   (function () {
     var maxd = Math.hypot(NX, NY, NZ) / 2, seed = 7;
@@ -43,6 +43,7 @@
 
   var W = 0, H = 0, dpr = 1, F = 600, raf = 0, on = true, t0 = performance.now();
   var mx = 0, my = 0, tx = 0, ty = 0, px = -1e4, py = -1e4, p = 0, pin = false, runway = 1, y0 = 0, hh = 69;
+  var lp = '', lx = '', ly = '', lsx = '', lsy = '', lastT = 0, vis = [], band = [[], [], []];
   var P = new Array(A.length);
   for (var n0 = 0; n0 < A.length; n0++) P[n0] = { x: 0, y: 0, f: 0, z: 0, r: 0, a: 0, g: A[n0].g, i: n0 };
 
@@ -53,7 +54,7 @@
   var stack = false, textTop = 0;
   function measure() {
     var r = stick.getBoundingClientRect();
-    dpr = Math.min(2, window.devicePixelRatio || 1); W = r.width; H = r.height;
+    dpr = Math.min(innerWidth < 760 ? 1.5 : 1.25, window.devicePixelRatio || 1); W = r.width; H = r.height;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25);
@@ -74,12 +75,18 @@
   }
 
   function frame(now) {
-    raf = 0; if (!on) return;
+    raf = 0; if (!on || document.hidden) return;
+    // once settled and nothing is moving, 30 fps is plenty; never spend more than needed
+    var calm = now - t0 > 3200 && Math.abs(progress() - p) < 0.0008 && px < -9e3;
+    if (!still && calm && now - lastT < 30) { raf = requestAnimationFrame(frame); return; }
+    lastT = now;
     var t = still ? 99 : (now - t0) / 1000;
     p += (progress() - p) * (still ? 1 : 0.14);                    // eased, so the camera never jerks
     mx += (tx - mx) * 0.06; my += (ty - my) * 0.06;
-    de.style.setProperty('--p', p.toFixed(4)); de.style.setProperty('--mx', mx.toFixed(3)); de.style.setProperty('--my', my.toFixed(3));
-    stick.style.setProperty('--sx', (px < -9e3 ? W * 0.7 : px).toFixed(0) + 'px'); stick.style.setProperty('--sy', (py < -9e3 ? H * 0.45 : py).toFixed(0) + 'px');
+    var vp = p.toFixed(3), vx = mx.toFixed(2), vy = my.toFixed(2);
+    if (vp !== lp) { stick.style.setProperty('--p', lp = vp); } if (vx !== lx) { stick.style.setProperty('--mx', lx = vx); } if (vy !== ly) { stick.style.setProperty('--my', ly = vy); }
+    var vsx = (px < -9e3 ? W * 0.7 : px).toFixed(0), vsy = (py < -9e3 ? H * 0.45 : py).toFixed(0);
+    if (vsx !== lsx || vsy !== lsy) { stick.style.setProperty('--sx', (lsx = vsx) + 'px'); stick.style.setProperty('--sy', (lsy = vsy) + 'px'); }
     g.clearRect(0, 0, W, H);
 
     var ep = p * p * (3 - 2 * p), D = 17 - 14.6 * ep;               // camera distance: flies into the crystal as you scroll
@@ -87,7 +94,7 @@
     var cth = Math.cos(th), sth = Math.sin(th), cph = Math.cos(ph), sph = Math.sin(ph);
     var cx0 = stack ? W * 0.5 : W * 0.7, cx = cx0 - (stack ? 0 : ep * W * 0.2), cy = stack ? textTop * 0.5 : H * 0.5;
     var zoomIn = 1 + ep * 0.2, wave = t * 1.1, maskA = 0.56 * (1 - ep), maskB = 0.2 * (1 - ep);
-    var vis = [], i, a, q;
+    var i, a, q; vis.length = 0;
     for (i = 0; i < A.length; i++) {
       a = A[i]; q = P[i];
       var u = still ? 1 : ease((t - 0.2 - a.d) / 1.5), s = 1 - u;
@@ -97,18 +104,18 @@
       var f = F * zoomIn / dz, sx = cx + x1 * f, sy = cy + y1 * f;
       var dx = sx - px, dy = sy - py, dd = Math.hypot(dx, dy), push = 0, near = 0;
       if (dd < 150) { near = 1 - dd / 150; push = near * near * 26 / (dd + 1); sx += dx * push; sy += dy * push; }
-      var al = clamp(u * 1.4) * smooth(0.7, 1.7, dz) * (1 - smooth(20, 34, dz)) * (0.45 + 0.55 * smooth(maskB, maskA + 0.08, sx / W));
+      var al = clamp(u * 1.4) * smooth(2.2, 4.2, dz) * (1 - smooth(20, 34, dz)) * (0.45 + 0.55 * smooth(maskB, maskA + 0.08, sx / W));
       if (W < 760) al *= 0.8;
       if (stack) al *= 1 - smooth(textTop - 40, textTop - 4, sy);   // never draw lattice over the copy
-      var ex = (sx - cx0) / (W * 0.26), ey = (sy - cy) / (H * 0.3), ed = Math.sqrt(ex * ex + ey * ey);
-      al *= 1 - (1 - 0.18 - 0.82 * smooth(0.55, 1.25, ed)) * (1 - ep) * (W < 760 ? 0 : 1);   // a clear pool of paper behind the logo, filling in as the camera dives
+      var ex = (sx - cx0) / (W * 0.27), ey = (sy - cy) / (H * 0.32), ed = Math.sqrt(ex * ex + ey * ey);
+      al *= 1 - (1 - 0.07 - 0.93 * smooth(0.6, 1.3, ed)) * (1 - ep) * (W < 760 ? 0 : 1);   // a clear pool of paper behind the logo, filling in as the camera dives
       if (al < 0.01) { q.f = 0; continue; }
-      q.f = 1; q.x = sx; q.y = sy; q.z = dz; q.r = Math.max(1.1, 0.17 * f * (1 + near * 0.6)); q.a = al; q.n = near; vis.push(q);
+      q.f = 1; q.x = sx; q.y = sy; q.z = dz; q.r = Math.min(46, Math.max(1.1, 0.17 * f * (1 + near * 0.6))); q.a = al; q.n = near; vis.push(q);
     }
     vis.sort(function (m, n) { return n.z - m.z; });                // far to near
     // bonds, in three depth bands (one stroke each)
     g.lineWidth = Math.max(0.8, F / 560); g.lineCap = 'round';
-    var band = [[], [], []];
+    band[0].length = band[1].length = band[2].length = 0;
     for (i = 0; i < B.length; i++) {
       var p1 = P[B[i][0]], p2 = P[B[i][1]]; if (!p1.f || !p2.f) continue;
       var zz = (p1.z + p2.z) / 2; band[zz > 15 ? 0 : zz > 9 ? 1 : 2].push(p1, p2);
@@ -118,13 +125,15 @@
       for (var k = 0; k < band[bi].length; k += 2) { var m1 = band[bi][k], m2 = band[bi][k + 1]; g.moveTo(m1.x, m1.y); g.lineTo(m2.x, m2.y); }
       g.stroke();
     }
+    var lga = -1;
     for (i = 0; i < vis.length; i++) {
-      q = vis[i]; g.globalAlpha = q.a * (0.55 + 0.45 * smooth(2, 12, 24 - q.z));
+      q = vis[i]; var ga = Math.round(q.a * (0.55 + 0.45 * smooth(2, 12, 24 - q.z)) * 8) / 8; if (ga !== lga) { g.globalAlpha = lga = ga; }
       var r = q.r; g.drawImage(q.g ? GOLD : NAVY, q.x - r, q.y - r, r * 2, r * 2);
     }
     g.globalAlpha = 1;
     if (!still) raf = requestAnimationFrame(frame);
   }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) kick(); });
   function kick() { if (!raf && on) raf = requestAnimationFrame(frame); }
 
   hero.addEventListener('pointermove', function (ev) {
