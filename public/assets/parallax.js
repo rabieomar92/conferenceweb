@@ -23,11 +23,6 @@
       if (d > vh * 1.2 || d < -vh * 1.2) continue;                         // off screen: leave it
       el.style.transform = 'translate3d(0,' + (d * el.__s).toFixed(1) + 'px,0)';
     }
-    if (hero && copy) {
-      var h = hero.offsetHeight, k = Math.min(1, y / h);
-      copy.style.transform = 'translate3d(0,' + (y * 0.12).toFixed(1) + 'px,0)';
-      copy.style.opacity = (1 - k * 0.75).toFixed(3);
-    }
   }
   function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(update); } }
 

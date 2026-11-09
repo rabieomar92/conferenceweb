@@ -1075,3 +1075,43 @@ html:not(.tabs-on) .dform{display:block}
 .top nav .n-act form.lo{display:inline-flex;margin:0}
 .top nav .n-act button.pill{font:inherit;font-weight:700;cursor:pointer;background:#fff;color:var(--navy);border:1px solid var(--navy);padding:9px 18px;border-radius:2px;line-height:inherit}
 .top nav .n-act button.pill:hover{background:var(--navy);color:#fff}
+
+/* ════ Hero: a crystal in perspective, with a scroll film ════ */
+.hero{padding:0!important;min-height:0!important;display:block!important;overflow:visible!important;background:var(--paper);border-bottom:1px solid var(--rule)}
+.hero-stick{position:relative;overflow:hidden;display:flex;align-items:center;min-height:clamp(560px,calc(100svh - 69px),980px);padding:clamp(40px,6vw,84px) 0}
+.hp-on .hero-stick{position:sticky;top:var(--hh,69px);height:calc(100svh - var(--hh,69px));min-height:0;padding:0}
+.hero .hgrid{position:relative;z-index:2;width:100%;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:clamp(24px,4vw,72px);align-items:center}
+.hero canvas.lattice{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:1}
+.hero-sun{position:absolute;z-index:0;left:70%;top:50%;width:min(780px,90vw);aspect-ratio:1;margin:calc(min(780px,90vw)/-2) 0 0 calc(min(780px,90vw)/-2);border-radius:50%;background:radial-gradient(closest-side,rgba(255,213,99,.8),rgba(242,169,0,.28) 46%,rgba(242,169,0,0) 74%);transform:scale(calc(1 + var(--p,0)*2.6));opacity:calc(.5 + var(--p,0)*.35);will-change:transform;pointer-events:none}
+.hero-spot{position:absolute;z-index:1;left:0;top:0;width:560px;height:560px;background:radial-gradient(closest-side,rgba(242,169,0,.16),rgba(242,169,0,0));transform:translate3d(calc(var(--sx,70%) - 280px),calc(var(--sy,45%) - 280px),0);pointer-events:none;will-change:transform}
+.hero .hcopy{transform:translate3d(calc(var(--mx,0)*-10px),calc(var(--p,0)*-80px),0);opacity:max(0,calc(1 - var(--p,0)*1.7));will-change:transform,opacity}
+.hero .hcopy>*{animation:rise .9s cubic-bezier(.2,.7,.2,1) both}
+.hero .hcopy>.eyebrow{animation-delay:.1s}.hero .hcopy>.hfacts{animation-delay:1.05s}.hero .hcopy>.cta{animation-delay:1.25s}
+.hero h1{animation:none!important;font-size:clamp(36px,min(4.9vw,9.2vh),80px)!important;line-height:1.03!important;letter-spacing:-.022em;margin:0 0 clamp(20px,3.4vh,34px)!important}
+.hero h1 .w{display:inline-block;vertical-align:top;overflow:hidden;padding:.08em .03em .12em;margin:-.08em -.03em -.12em;transform:translate3d(0,calc(var(--p,0)*(var(--i,0) + 4)*-11px),0)}
+.hero h1 .w>span{display:inline-block;animation:wordUp 1.05s cubic-bezier(.16,.84,.24,1) both;animation-delay:calc(.3s + var(--i,0)*.07s)}
+@keyframes wordUp{from{transform:translate3d(0,112%,0) rotate(4deg);opacity:0}to{transform:none;opacity:1}}
+.hero .mark{transform:perspective(1100px) translate3d(calc(var(--mx,0)*18px),calc(var(--my,0)*10px - var(--p,0)*34px),0) rotateY(calc(var(--mx,0)*8deg)) rotateX(calc(var(--my,0)*-6deg)) scale(calc(1 + var(--p,0)*.32));opacity:min(1,calc(1.9 - var(--p,0)*2));will-change:transform,opacity;transform-style:preserve-3d}
+.lockup image{transform-box:fill-box;transform-origin:50% 60%;animation:artIn 1.8s cubic-bezier(.2,.7,.2,1) .25s both}
+@keyframes artIn{from{opacity:0;transform:scale(.9) translateY(22px);filter:blur(12px)}to{opacity:1;transform:none;filter:blur(0)}}
+.lk-main,.lk-sub,.lk-pen{transform-box:fill-box;animation:txtIn 1s cubic-bezier(.2,.7,.2,1) both}
+.lk-main{animation-delay:1s}.lk-sub{animation-delay:1.5s}.lk-pen{animation-delay:1.75s}
+@keyframes txtIn{from{opacity:0;transform:translateY(26px)}}
+.lk-gold{transform-box:fill-box;transform-origin:0 50%;animation:rule 1.2s cubic-bezier(.7,0,.2,1) 1.25s both}.lk-gold.g2{animation-delay:1.55s}
+@keyframes rule{from{transform:scaleX(0)}}
+.lk-sheen{mix-blend-mode:soft-light;pointer-events:none;animation:sheen 1.7s cubic-bezier(.4,0,.2,1) 2.5s both}
+@keyframes sheen{from{transform:translateX(0) skewX(-18deg);opacity:1}90%{opacity:1}to{transform:translateX(1500px) skewX(-18deg);opacity:0}}
+.hscroll{position:absolute;z-index:3;left:50%;bottom:22px;width:1px;height:54px;background:linear-gradient(var(--navy),transparent);opacity:max(0,calc(.55 - var(--p,0)*9));pointer-events:none}
+.hscroll::after{content:"";position:absolute;left:-2px;top:0;width:5px;height:5px;border-radius:50%;background:var(--gold-lt);animation:cue 2.2s ease-in-out infinite}
+@keyframes cue{0%{transform:translateY(0);opacity:0}25%{opacity:1}100%{transform:translateY(50px);opacity:0}}
+@media(max-width:860px){
+  .hero .hgrid{grid-template-columns:1fr;gap:10px}.hscroll{display:none}
+  .hero .mark{order:-1;max-width:min(420px,86vw);justify-self:start}
+  .hero-sun{left:62%;top:26%}
+  .hero h1{font-size:clamp(32px,8.6vw,48px)!important}
+}
+@media(prefers-reduced-motion:reduce){.hero *,.hero *::before,.hero *::after{animation:none!important}.hero .hcopy,.hero .mark,.hero-sun,.hero h1 .w{transform:none!important;opacity:1!important}.hscroll{display:none}}
+.back.tosite{display:table;margin:0 0 clamp(18px,3vw,34px);font-size:17px;font-weight:700;color:var(--navy);text-decoration:none;border-bottom:2px solid var(--gold-lt);padding-bottom:2px}
+.back.tosite:hover{color:var(--navy);border-bottom-color:var(--navy)}
+.hero h1{display:block!important}
+.hero .mark{position:relative}.hero .mark::before{content:"";position:absolute;inset:-14% -10%;z-index:-1;background:radial-gradient(closest-side,rgba(251,250,247,.92) 55%,rgba(251,250,247,0));pointer-events:none}
