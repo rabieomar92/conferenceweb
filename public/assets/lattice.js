@@ -29,7 +29,7 @@
   });
 
   // ── the crystal (simple cubic grid, one colour) ──
-  var small = innerWidth < 760, NX = small ? 7 : 11, NY = small ? 6 : 8, NZ = small ? 6 : 8;
+  var small = innerWidth < 760, NX = small ? 6 : 9, NY = small ? 5 : 7, NZ = small ? 5 : 7;
   var A = [], B = [], idx = {};
   (function () {
     var maxd = Math.hypot(NX, NY, NZ) / 2, seed = 7;
@@ -54,7 +54,7 @@
   var lite = 0, lowres = false, stack = false, textTop = 0, scx = 0, scy = 0, sw = 0, sh = 0;
   function measure() {
     var r = stick.getBoundingClientRect();
-    dpr = Math.min(lowres ? 1 : innerWidth < 760 ? 2 : 1.75, window.devicePixelRatio || 1); W = r.width; H = r.height;   // sharp on high-density screens; drops to 1 if the device struggles
+    dpr = Math.min(lowres ? 1 : innerWidth < 760 ? 1.5 : 1.25, window.devicePixelRatio || 1); W = r.width; H = r.height;   // sharp on high-density screens; drops to 1 if the device struggles
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25);
@@ -79,8 +79,9 @@
   function frame(now) {
     raf = 0; if (!on || document.hidden) return;
     // once settled and nothing is moving, 30 fps is plenty; never spend more than needed
-    var calm = now - t0 > 3200 && Math.abs(progress() - p) < 0.0008 && px < -9e3;
-    if (!still && (calm || lite > 1) && now - lastT < (lite > 1 ? 40 : 30)) { raf = requestAnimationFrame(frame); return; }
+    var moving = Math.abs(progress() - p) > 0.0008 || px > -9e3, calm = !moving && now - t0 > 3200;
+    var budget = moving ? 15 : calm ? 48 : 31; if (lite > 1) budget = Math.max(budget, 31);
+    if (!still && now - lastT < budget) { raf = requestAnimationFrame(frame); return; }
     var gap = lastT ? now - lastT : 16.7; lastT = now;
     fdt += (Math.min(gap, 120) - fdt) * 0.1;
     var t = still ? 99 : (now - t0) / 1000;
@@ -88,8 +89,7 @@
     mx += (tx - mx) * 0.06; my += (ty - my) * 0.06;
     var vp = p.toFixed(3);
     if (vp !== lp) { stick.style.setProperty('--p', lp = vp); } 
-    var vsx = (px < -9e3 ? W * 0.7 : px).toFixed(0), vsy = (py < -9e3 ? H * 0.45 : py).toFixed(0);
-    if (vsx !== lsx || vsy !== lsy) { stick.style.setProperty('--sx', (lsx = vsx) + 'px'); stick.style.setProperty('--sy', (lsy = vsy) + 'px'); }
+
     g.clearRect(0, 0, W, H);
 
     var ep = p * p * (3 - 2 * p), D = 17 - 14.6 * ep;               // camera distance: flies into the crystal as you scroll
@@ -138,7 +138,7 @@
       g.fill();
     }
     // quality governor: if this device spends too long drawing, shed detail (the intro itself stays as designed)
-    var slow = fdt > (calm ? 45 : 24);                                // judged by real frame gaps, so drawing cost on the GPU counts too
+    var slow = fdt > budget * 1.5 + 4;                                // judged by real frame gaps, so drawing cost on the GPU counts too
     if (!still && !lowres && dpr > 1 && slow && now - t0 > 500) { lowres = true; fdt = 16.7; measure(); }   // sharpness goes first, at any moment
     else if (!still && now - t0 > 2600 && slow && lite < 2) { lite++; fdt = 16.7; }
     if (!still) raf = requestAnimationFrame(frame);

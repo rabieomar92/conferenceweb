@@ -1166,3 +1166,7 @@ html:not(.tabs-on) .dform{display:block}
 .faq summary::after{content:"+";flex:none;font-weight:400;font-size:24px;line-height:1;color:var(--amber);transition:transform .25s}
 .faq details[open] summary::after{transform:rotate(45deg)}
 .faq details p{margin:0 0 20px;max-width:62ch;color:var(--ink)}
+
+/* lighter hero: no pointer light, no permanent compositing layers */
+.hero-spot{display:none!important}
+.hero .hcopy,.hero .mark,.hero-sun{will-change:auto!important}
