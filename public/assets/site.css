@@ -931,3 +931,8 @@ form.f,div.f,.paycard,.dcard,.chg,.evbox{background:#fff;border:1px solid var(--
 .lk-pen{font-family:'TeX Gyre Pagella','Palatino Linotype',Palatino,serif;font-weight:700;font-size:44px;fill:#12285C}
 .lk-gold{fill:#F2A900}
 .mark figcaption,.mk-t,.mk-s,.mk-p{display:none}
+/* heavy weight: Pagella Bold is the heaviest cut, so the title gets a same-colour outline to reach a black weight */
+.lk-main{font-size:150px;stroke:#12285C;stroke-width:5px;stroke-linejoin:round;paint-order:stroke fill}
+.lk-main .lk-g{fill:#F2A900;stroke:#F2A900}
+.lk-sub{stroke:#12285C;stroke-width:.7px;stroke-linejoin:round}
+.lk-pen{stroke:#12285C;stroke-width:1.1px;stroke-linejoin:round}
