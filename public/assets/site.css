@@ -1308,3 +1308,30 @@ html:has(dialog[open]){overflow:hidden}
 @media(max-width:980px){.top.portal nav{display:flex!important;position:static;flex-direction:row;align-items:center;gap:12px;margin-left:auto;padding:0;background:none;border:0;box-shadow:none}
   .top.portal nav a:not(.n-lang){display:none!important}.top.portal nav a.n-lang{display:inline-flex!important;margin:0}.top.portal nav button.pill{padding:0 14px!important;min-height:40px;font-size:11px!important}}
 .sbtns .btn,.sbtns .b2{min-height:52px;box-sizing:border-box}
+/* ═══ one tab style for the whole site: a soft segmented control, no rules or underlines ═══ */
+.itabs,.dtabs,.admtabs .wrap{--seg:#EFECE4}
+/* dashboards (participant, speaker) */
+.dtabs2.itabs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;border:0!important;background:var(--seg);border-radius:14px;padding:5px;margin:26px 0 30px}
+.itabs button{border:0!important;margin:0;border-radius:10px;padding:12px 6px 11px;gap:6px;color:#5B6478;transition:background .2s,color .2s,box-shadow .2s}
+.itabs button:hover{background:rgba(255,255,255,.55);color:var(--navy)}
+.itabs button[aria-current=page]{background:#fff;color:var(--navy);box-shadow:0 1px 2px rgba(18,40,92,.08),0 4px 14px -6px rgba(18,40,92,.22)}
+.itabs button[aria-current=page] .tl{font-weight:700}
+.itabs .tdot{box-shadow:0 0 0 2px var(--seg)}.itabs button[aria-current=page] .tdot{box-shadow:0 0 0 2px #fff}
+@media(max-width:560px){.dtabs2.itabs{gap:2px;padding:4px;border-radius:12px}.itabs button{border-radius:9px;padding:9px 2px 8px}}
+/* programme days */
+.dtabs{display:flex!important;gap:4px!important;border:0!important;background:var(--seg)!important;border-radius:14px;padding:5px!important;margin-bottom:20px!important;overflow-x:auto;scrollbar-width:none}
+.dtabs::-webkit-scrollbar{display:none}
+.dtabs button{border:0!important;margin:0!important;border-radius:10px;background:none!important;color:#5B6478!important;padding:12px 14px!important;transition:background .2s,color .2s,box-shadow .2s}
+.dtabs button span{color:var(--gold)!important}
+.dtabs button:hover{background:rgba(255,255,255,.55)!important;color:var(--navy)!important}
+.dtabs button[aria-selected=true]{background:#fff!important;color:var(--navy)!important;box-shadow:0 1px 2px rgba(18,40,92,.08),0 4px 14px -6px rgba(18,40,92,.22)}
+/* admin section bar */
+.admtabs{border-bottom:0!important;background:transparent!important;padding:12px 0 4px}
+.admtabs .wrap{gap:4px!important;align-items:center;background:var(--seg);border-radius:14px;padding:5px!important;width:auto}
+.admtabs a{border:0!important;border-radius:10px;padding:10px 16px!important;color:#5B6478;transition:background .2s,color .2s,box-shadow .2s}
+.admtabs a:hover{background:rgba(255,255,255,.55);color:var(--navy)}
+.admtabs a[aria-current]{background:#fff;color:var(--navy);box-shadow:0 1px 2px rgba(18,40,92,.08),0 4px 14px -6px rgba(18,40,92,.22)}
+.admtabs a.ext{background:none!important;box-shadow:none}
+@media(max-width:640px){.admtabs .wrap{margin:0 12px;padding:4px!important}.admtabs a{padding:9px 11px!important}}
+.au-opt:has(input:checked){box-shadow:none!important;background:#F4F6FB;border-color:var(--navy)}
+@media(max-width:430px){.itabs .tl{font-size:10.5px;letter-spacing:0}.itabs button{padding:9px 1px 8px}}
