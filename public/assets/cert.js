@@ -32,7 +32,7 @@ const row=(g,t,o)=>({o,t,h:o.lh});
 async function drawCert(p){
   await loadFonts();
   const cv=document.createElement('canvas');cv.width=W*K;cv.height=H*K;const g=cv.getContext('2d');g.scale(K,K);g.imageSmoothingQuality='high';
-  const [mass,sop,apex,sig,qr]=await Promise.all([loadImg(B+'/assets/mass.png'),loadImg(B+'/assets/sop-w.png'),loadImg(B+'/assets/usm-apex-w.png'),C.sigImg?loadImg(C.sigImg):null,
+  const [mass,sop,apex,sig,qr]=await Promise.all([Promise.resolve(null),loadImg(B+'/assets/sop-w.png'),loadImg(B+'/assets/usm-apex-w.png'),C.sigImg?loadImg(C.sigImg):null,
     loadImg(qrUrl(location.origin+B+'/verify?c='+encodeURIComponent(p.ref)))]);
   // page + crown
   g.fillStyle='#F8F7F4';g.fillRect(0,0,W,H);
@@ -84,7 +84,7 @@ async function drawCert(p){
   text(g,'CERTIFICATE NO.',qx,fb-5-14-2+1,{size:9.5,c:MUTE,ls:2});text(g,p.ref,qx,fb-2,{size:12,w:700,c:NAVY});
   // supporter strip
   g.fillStyle='#fff';g.fillRect(1,754,W-2,39);g.fillStyle='#DDD8CE';g.fillRect(1,754,W-2,1);
-  text(g,'ORGANISED BY THE MALAYSIAN SOLID STATE SCIENCE AND TECHNOLOGY SOCIETY (MASS)  ·  HOSTED BY UNIVERSITI SAINS MALAYSIA',W/2,754+20+3,{size:9,c:MUTE,ls:2});
+  text(g,'ORGANISED BY THE SCHOOL OF PHYSICS, UNIVERSITI SAINS MALAYSIA',W/2,754+20+3,{size:9,c:MUTE,ls:2});
   return cv;
 }
 async function render(p){return drawCert(p)}
