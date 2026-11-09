@@ -921,3 +921,13 @@ form.f,div.f,.paycard,.dcard,.chg,.evbox{background:#fff;border:1px solid var(--
 /* text links never turn into filled buttons */
 .b2l,.b2l:hover,.b2l:focus{display:inline;height:auto;background:none!important;border:0!important;padding:0!important;color:var(--navy)!important;box-shadow:none}
 .b2l:hover{text-decoration-color:var(--navy)}
+
+/* logo lockup: the artwork is an image, every letter is live TeX Gyre Pagella Bold, laid out as in the original logo */
+.mark{display:block;margin:0}
+.mark svg.lockup{display:block;width:100%;height:auto;overflow:visible}
+.lk-main{font-family:'TeX Gyre Pagella','Palatino Linotype',Palatino,serif;font-weight:700;font-size:146px;fill:#12285C;font-feature-settings:"lnum";letter-spacing:0}
+.lk-main .lk-g{fill:#F2A900}
+.lk-sub{font-family:'TeX Gyre Pagella','Palatino Linotype',Palatino,serif;font-weight:700;font-size:23.5px;fill:#12285C}
+.lk-pen{font-family:'TeX Gyre Pagella','Palatino Linotype',Palatino,serif;font-weight:700;font-size:44px;fill:#12285C}
+.lk-gold{fill:#F2A900}
+.mark figcaption,.mk-t,.mk-s,.mk-p{display:none}
