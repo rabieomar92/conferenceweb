@@ -4,7 +4,7 @@ Website for the **11th International Conference on Solid State Science and Techn
 Theme: *Malaysia’s High-Tech Era: Innovation in Nanotechnology, AI and Semiconductors*.
 
 Express + SQLite (better-sqlite3). Home page (topics, programme, fees, speakers, venue), registration with email verification or Google sign-in,
-participant sign-in with **Ticket2U payment**, admin dashboard, speaker portal, certificates (PDF/ZIP) with public verification.
+participant sign-in with online payment (**Stripe**: card, FPX, GrabPay; or **Ticket2U**), admin dashboard, speaker portal, certificates (PDF/ZIP) with public verification.
 Typeface: TeX Gyre Pagella (self-hosted, `public/assets/fonts`, GUST Font License).
 
 ## Run
@@ -16,7 +16,16 @@ npm start                 # http://localhost:3000
 Node 18+ (22 recommended). Behind a reverse proxy set `TRUST_PROXY=1`; for a sub-path set `BASE_PATH=/icssst2027`.
 The database is `icssst2027.sqlite` in `DATA_DIR` (default `./data`) – set `DATA_DIR` to a folder outside the app so redeploys keep registrations, and back it up (Admin → Settings → backup).
 
-## Payment with Ticket2U
+## Payment with Stripe (default)
+Participants pay on **Stripe Checkout** from their *My registration* page: cards for every fee; **FPX online banking and GrabPay** for RM fees (Stripe shows the methods you switch on in its dashboard). Payment is confirmed automatically: by the Stripe webhook, and also when the participant returns to the site. Stripe emails the receipt; the site sends its own “payment confirmed” email. Refunds made in the Stripe dashboard set the registration back to unpaid.
+
+1. Create a Stripe account for the organiser (Malaysia; a registered society or company and a Malaysian bank account are needed for live payments). Turn on FPX and GrabPay under Settings → Payment methods.
+2. Set `STRIPE_SECRET_KEY` (start with `sk_test_…`).
+3. Add a webhook endpoint `SITE_URL/stripe/webhook` with the events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `charge.refunded`; set its signing secret as `STRIPE_WEBHOOK_SECRET`.
+4. Test with Stripe's test cards (4242 4242 4242 4242, any future date, any CVC) and the FPX test banks, then swap in the live key and live webhook secret.
+5. Admin → Payments shows whether the keys are set, test or live mode, and the webhook URL. Admin → Settings → Fees & payment chooses Stripe, Stripe + Ticket2U, or Ticket2U only. Fees must be written as `RM 900.00` or `USD 350.00`.
+
+## Payment with Ticket2U (optional)
 Ticket2U has no public payment API for outside websites, so the site links out to Ticket2U and reconciles afterwards:
 
 1. In the **Ticket2U organiser dashboard**, create the ICSSST 2027 event with one ticket type per fee category (Non-MASS Members RM 1,200, MASS Members RM 1,000, Students RM 900, Early Bird Local RM 800, International USD 350, Early Bird International USD 300, General Non-Presenting RM 600). Add a custom registration field “ICSSST reference” if you like (Edit Event → Price Settings → Pricing).

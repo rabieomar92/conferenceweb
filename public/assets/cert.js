@@ -32,7 +32,7 @@ const row=(g,t,o)=>({o,t,h:o.lh});
 async function drawCert(p){
   await loadFonts();
   const cv=document.createElement('canvas');cv.width=W*K;cv.height=H*K;const g=cv.getContext('2d');g.scale(K,K);g.imageSmoothingQuality='high';
-  const [sop,apex,sig,qr]=await Promise.all([loadImg(B+'/assets/sop-w.png'),loadImg(B+'/assets/usm-apex-w.png'),C.sigImg?loadImg(C.sigImg):null,
+  const [mass,sop,apex,sig,qr]=await Promise.all([loadImg(B+'/assets/mass.png'),loadImg(B+'/assets/sop-w.png'),loadImg(B+'/assets/usm-apex-w.png'),C.sigImg?loadImg(C.sigImg):null,
     loadImg(qrUrl(location.origin+B+'/verify?c='+encodeURIComponent(p.ref)))]);
   // page + crown
   g.fillStyle='#F8F7F4';g.fillRect(0,0,W,H);
@@ -42,9 +42,9 @@ async function drawCert(p){
   const tg={size:13,w:700,c:NAVY,ls:4},tw=width(g,'CERTIFICATE',tg)-tg.ls+48;
   g.fillStyle=AMB;g.fillRect(70,43,tw,38);text(g,'CERTIFICATE',70+24,43+24,{...tg,left:true});
   // logos, right-aligned: heights 50 / 38 / 56 with hairline dividers
-  const logos=[[sop,50],[apex,38]].filter(l=>l[0]).map(([i,h])=>({i,h,w:h*i.naturalWidth/i.naturalHeight}));
+  const logos=[[mass,72],[sop,50],[apex,38]].filter(l=>l[0]).map(([i,h])=>({i,h,w:h*i.naturalWidth/i.naturalHeight}));
   let lx=W-70-(logos.reduce((a,l)=>a+l.w,0)+52*(logos.length-1)+Math.max(0,logos.length-1)*1);
-  logos.forEach((l,k)=>{g.drawImage(l.i,lx,(124-l.h)/2,l.w,l.h);lx+=l.w;if(k<logos.length-1){lx+=26;g.fillStyle='rgba(255,255,255,.25)';g.fillRect(lx,(124-46)/2,1,46);lx+=27}});
+  logos.forEach((l,k)=>{if(l.i===mass){g.fillStyle='#fff';g.beginPath();g.arc(lx+l.w/2,62,l.h/2+5,0,6.2832);g.fill()}g.drawImage(l.i,lx,(124-l.h)/2,l.w,l.h);lx+=l.w;if(k<logos.length-1){lx+=26;g.fillStyle='rgba(255,255,255,.25)';g.fillRect(lx,(124-46)/2,1,46);lx+=27}});
   // frame
   g.strokeStyle='rgba(176,120,0,.45)';g.strokeRect(34.5,147.5,W-69,592);
   // centred text stack (vertically centred between frame top and footer)

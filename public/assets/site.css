@@ -535,3 +535,24 @@ div.f{background:#fff;border:1px solid var(--rule);padding:56px 56px 50px}
   .feechips{grid-template-columns:1fr}
   .fees .fc{font-size:17px}.fees .fp{font-size:17px;padding:5px 10px}
 }
+
+/* MASS logo (transparent PNG) */
+.bl .bl-m{height:46px}
+.pgroup .logos.mass{gap:16px}.pgroup img.ms{height:76px}
+.meta .cell.org .v{display:flex;align-items:center;gap:14px;font-size:21px}
+.meta .cell.org img{width:58px;height:58px;flex:none}
+@media(max-width:900px){.bl .bl-m{height:40px}}
+@media(max-width:560px){.bl{display:inline-flex;margin-right:10px}.bl .bl-s,.bl .bl-u,.bl i{display:none}.bl .bl-m{height:38px}}
+
+/* Stripe pay block */
+.paynow{margin:6px 0 14px}.paynow .btn{width:100%;justify-content:center;font-size:13px;padding:24px 30px}
+.pmeth{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+.pmeth span{font-size:12.5px;border:1px solid var(--rule);padding:4px 10px;color:var(--navy);background:var(--paper)}
+.pmeth em{font-style:normal;font-size:12.5px;color:var(--muted);margin-left:auto}
+.pmeth em::before{content:'🔒 '}
+details.alt{margin-top:26px;padding-top:20px;border-top:1px solid var(--rule)}details.alt summary{cursor:pointer;color:var(--navy);font-weight:700;margin-bottom:14px}
+/* headline lines left-aligned; header nav on one line */
+.hero h1{align-items:flex-start}
+.top nav{gap:26px}.top nav a{white-space:nowrap}
+@media(max-width:1320px){.top nav{gap:20px}.top nav a{letter-spacing:.12em}.brand .lg-2{display:none}}
+@media(max-width:1060px){.top nav a[href$="#topics"],.top nav a[href$="#about"]{display:none}}

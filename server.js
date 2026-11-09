@@ -14,6 +14,7 @@ const settings = require('./lib/settings');            // loads runtime settings
 const views = require('./lib/views');
 const adminViews = require('./lib/admin-views');
 const mail = require('./lib/mail');
+const stripe = require('./lib/stripe');
 const { normaliseEmail, maskEmail } = require('./lib/util');
 
 process.on('uncaughtException', (e) => console.error('UNCAUGHT', e));
@@ -39,7 +40,7 @@ app.use(helmet({
       'img-src': ["'self'", 'data:', 'blob:'],
       'connect-src': ["'self'"],
       'frame-src': ["'self'", 'https://www.google.com'],
-      'form-action': ["'self'"],
+      'form-action': ["'self'", 'https://checkout.stripe.com', ...(process.env.STRIPE_CHECKOUT_ORIGIN ? [process.env.STRIPE_CHECKOUT_ORIGIN] : [])],          // Stripe Checkout is reached by a redirect after a form post
       'frame-ancestors': ["'none'"],
       'upgrade-insecure-requests': cfg.secureCookies ? [] : null,
     },
@@ -369,7 +370,61 @@ router.post('/login/resend', async (req, res) => {
   codePage(req, res, { info: 'A new code has been sent.' });
 });
 router.post('/logout', (req, res) => { req.session = null; res.redirect(cfg.base + '/login'); });
-router.get('/account', requireReg, (req, res) => html(res, views.account({ r: req.reg, csrf: csrfToken(req), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined })));
+router.get('/account', requireReg, (req, res) => { if (req.query.cancelled !== undefined) flash(req, '', 'Payment cancelled — nothing was charged. You can try again whenever you are ready.'); html(res, views.account({ r: req.reg, csrf: csrfToken(req), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined, modes: payModes(), stripeAmount: (() => { const p = stripe.parseFee(req.reg.fee); return p ? stripe.money(p.currency, p.amount) : ''; })() })); });
+// Stripe: card / FPX / GrabPay through Stripe Checkout; confirmed by the webhook (and by the return page, in case the webhook is slow)
+const payModes = () => {
+  const st = stripe.configured() && (cfg.payProvider === 'stripe' || cfg.payProvider === 'both');
+  const t2u = cfg.payProvider === 'ticket2u' || cfg.payProvider === 'both' || (cfg.payProvider === 'stripe' && !stripe.configured());
+  return { stripe: st, t2u };
+};
+function confirmStripe(s) {
+  const id = Number(s.client_reference_id || (s.metadata && s.metadata.reg_id));
+  if (!id || s.payment_status !== 'paid') return 0;
+  return confirmPayments([id], { source: 'stripe', order: String(s.payment_intent || s.id), amount: stripe.money(s.currency, s.amount_total) });
+}
+router.post('/account/pay', requireReg, async (req, res) => {
+  const r = req.reg;
+  if (!csrfOk(req)) { flash(req, '', 'Your session expired. Please try again.'); return res.redirect(cfg.base + '/account'); }
+  if (r.pay_status === 'paid' || r.pay_status === 'waived') return res.redirect(cfg.base + '/account');
+  if (!payModes().stripe) { flash(req, '', 'Online card payment is not available right now.'); return res.redirect(cfg.base + '/account'); }
+  try {
+    const s = await stripe.createCheckout(r, views.SITE);
+    db.prepare('UPDATE registrations SET pay_session=? WHERE id=?').run(s.id, r.id);
+    return res.redirect(303, s.url);
+  } catch (ex) {
+    console.error('Stripe checkout failed for ' + r.ref + ':', ex.message);
+    flash(req, '', 'We could not open the payment page just now. Please try again in a moment, or contact ' + cfg.smtp.replyTo + '.');
+    return res.redirect(cfg.base + '/account');
+  }
+});
+router.get('/account/stripe/return', requireReg, async (req, res) => {
+  const sid = String(req.query.session_id || '');
+  if (/^cs_[A-Za-z0-9_]+$/.test(sid) && stripe.configured()) {
+    try {
+      const s = await stripe.getSession(sid);
+      if (String(s.client_reference_id) === String(req.reg.id)) {
+        if (s.payment_status === 'paid') { confirmStripe(s); flash(req, 'Payment received — thank you! A receipt is on its way to your email.'); }
+        else if (s.status === 'complete') flash(req, 'Your payment is being processed by your bank. This page will show Paid as soon as it clears.');
+      }
+    } catch (ex) { console.error('Stripe return check failed:', ex.message); flash(req, 'Thank you. We are confirming your payment; this page will show Paid shortly.'); }
+  }
+  res.redirect(cfg.base + '/account');
+});
+router.post('/stripe/webhook', express.raw({ type: '*/*', limit: '1mb' }), (req, res) => {
+  let ev;
+  try { ev = stripe.verifyWebhook(req.body, req.get('stripe-signature')); }
+  catch (ex) { console.error('Stripe webhook rejected:', ex.message); return res.status(400).send('Bad signature'); }
+  try {
+    const o = ev.data && ev.data.object;
+    if (ev.type === 'checkout.session.completed' || ev.type === 'checkout.session.async_payment_succeeded') confirmStripe(o);
+    else if (ev.type === 'checkout.session.async_payment_failed') console.warn('Stripe payment failed for', o.client_reference_id);
+    else if (ev.type === 'charge.refunded' && o.refunded && o.payment_intent) {
+      const n = db.prepare("UPDATE registrations SET pay_status='unpaid', paid_at=NULL, pay_note='refunded via Stripe' WHERE pay_ref=? AND pay_status='paid'").run(String(o.payment_intent)).changes;
+      if (n) console.log('Stripe refund recorded for', o.payment_intent);
+    }
+  } catch (ex) { console.error('Stripe webhook handling failed:', ex.message); return res.status(500).send('Error'); }   // Stripe retries
+  res.json({ received: true });
+});
 router.post('/account/paid', requireReg, (req, res) => {
   const r = req.reg;
   if (!csrfOk(req)) { flash(req, '', 'Your session expired. Please try again.'); return res.redirect(cfg.base + '/account'); }
@@ -780,7 +835,7 @@ function matchImport(text) {
   }
   return out;
 }
-router.get('/admin/payments', requireAdmin, (req, res) => html(res, adminViews.payments({ csrf: csrfToken(req), flash: takeFlash(req), t2u: cfg.ticket2uUrl, fees: cfg.fees, claimed: db.prepare("SELECT id,ref,full_name,email,category,fee,pay_ref,pay_claimed_at FROM registrations WHERE pay_status='claimed' ORDER BY pay_claimed_at LIMIT 500").all() })));
+router.get('/admin/payments', requireAdmin, (req, res) => html(res, adminViews.payments({ csrf: csrfToken(req), flash: takeFlash(req), t2u: cfg.ticket2uUrl, fees: cfg.fees, st: { on: stripe.configured(), mode: stripe.mode(), hook: !!cfg.stripe.webhookSecret, url: views.SITE + '/stripe/webhook', provider: cfg.payProvider, bad: cfg.fees.filter((f) => !stripe.parseFee(f.fee)).map((f) => f.name) }, paidBy: db.prepare("SELECT pay_source s, COUNT(*) n FROM registrations WHERE pay_status='paid' GROUP BY pay_source").all(), claimed: db.prepare("SELECT id,ref,full_name,email,category,fee,pay_ref,pay_claimed_at FROM registrations WHERE pay_status='claimed' ORDER BY pay_claimed_at LIMIT 500").all() })));
 router.post('/admin/payments/import', express.json({ limit: '8mb' }), requireAdmin, (req, res) => {
   if (!csrfOk(req)) return res.status(400).json({ ok: false, error: 'Session expired. Reload the page.' });
   const r = matchImport(req.body && req.body.csv);

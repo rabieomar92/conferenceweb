@@ -41,6 +41,11 @@ module.exports = {
     from: env.MAIL_FROM || '"ICSSST 2027" <events@usmphysics.org>',
     replyTo: env.MAIL_REPLY_TO || 'events@usmphysics.org',
   },
+  // Stripe (card, FPX, GrabPay). Secret key and webhook signing secret from the Stripe dashboard; keep them out of git.
+  stripe: {
+    secretKey: env.STRIPE_SECRET_KEY || '',
+    webhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
+  },
   // Google sign-in (OAuth 2.0). Leave the ID/secret empty to hide the button.
   google: {
     clientId: env.GOOGLE_CLIENT_ID || '',
