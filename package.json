@@ -5,7 +5,7 @@
   "description": "Registration, participant payments (Ticket2U), admin dashboard and certificates for ICSSST 2027",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --v8-pool-size=2 server.js",
     "hash": "node scripts/hash.js"
   },
   "engines": {

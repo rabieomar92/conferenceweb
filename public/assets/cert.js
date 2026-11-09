@@ -90,7 +90,7 @@ async function drawCert(p){
 async function render(p){return drawCert(p)}
 function pdfOf(canvas){
   const {jsPDF}=window.jspdf; const d=new jsPDF({orientation:'landscape',unit:'px',format:[1123,794],hotfixes:['px_scaling']});
-  d.addImage(canvas.toDataURL('image/jpeg',.95),'JPEG',0,0,1123,794); return d;
+  d.addImage(canvas.toDataURL('image/jpeg',.86),'JPEG',0,0,1123,794); return d;
 }
 const fname=p=>'Certificate_'+p.full_name.replace(/[^\w\-]+/g,'_').replace(/^_+|_+$/g,'')+'_'+p.ref+'.pdf';
 async function issue(ids){

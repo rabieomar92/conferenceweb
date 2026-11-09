@@ -59,3 +59,7 @@ Getting indexed:
 with all lettering in TeX Gyre Pagella Bold converted to outlines. `icssst-mark.svg` is the artwork without text.
 Rebuild or tweak it with `python3 scripts/logo/build_logo.py` (needs `pip install fonttools uharfbuzz` and the Pagella OTF);
 the colours are in `PALETTE` at the top of the script.
+
+
+## Shared hosting: thread ("process") limit
+Hostinger counts every thread as a process (limit 120). Node normally starts one helper thread per CPU core of the shared server, which can be 40–60 threads per app. The app limits itself: on start it restarts once in place (same PID) with `--v8-pool-size=2` and a 2-thread I/O pool, about 8–10 threads in total. If your panel lets you set environment variables, `NODE_OPTIONS=--v8-pool-size=2` does the same without the restart. `THREAD_LIMIT=off` disables it.

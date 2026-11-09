@@ -1,12 +1,25 @@
 'use strict';
-// Keep the process small on shared hosting: fewer helper threads (must be set before any async I/O).
+// Keep the process small on shared hosting. Hosting panels such as Hostinger count every thread as a "process".
+// Node normally starts one V8 helper thread per CPU core of the (large, shared) server — often 40–60 threads per app.
+// If the app was started without a thread limit, it restarts itself once in place (same process, same PID) with
+// --v8-pool-size=2 and a 2-thread I/O pool: about 8–10 threads in total. Set THREAD_LIMIT=off to disable.
 process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '2';
+{
+  const os = require('os'), cores = (os.availableParallelism ? os.availableParallelism() : os.cpus().length) || 1;
+  const limited = /--v8-pool-size/.test(process.execArgv.join(' ') + ' ' + (process.env.NODE_OPTIONS || ''));
+  if (!limited && (cores > 3 || process.env.THREAD_LIMIT === 'force') && process.env.THREAD_LIMIT !== 'off' && !process.env.ICSSST_REEXEC && typeof process.execve === 'function') {
+    try {
+      process.execve(process.execPath, [process.execPath, '--v8-pool-size=2', ...process.execArgv, ...process.argv.slice(1)], { ...process.env, ICSSST_REEXEC: '1' });
+    } catch (err) { console.warn('Could not limit helper threads (' + err.message + '); set NODE_OPTIONS=--v8-pool-size=2 in the hosting panel.'); }
+  }
+}
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const cookieSession = require('cookie-session');
 const helmet = require('helmet');
 const bcrypt = require('bcryptjs');
+const PW = require('./lib/pw');
 let svgCaptchaLib; const svgCaptcha = { create: (o) => (svgCaptchaLib ||= require('svg-captcha')).create(o) };   // loaded on first use (saves memory at start-up)
 const cfg = require('./config');
 const { db, secret } = require('./lib/db');
@@ -277,7 +290,7 @@ router.post('/register', async (req, res) => {
 
   const key = normaliseEmail(v.email);
   if (!errors.length && db.prepare('SELECT 1 FROM registrations WHERE email_key=?').get(key)) errors.push('This email address is already registered.');
-  if (!errors.length) v.pw_hash = await bcrypt.hash(pw, 11);                   // only the hash is kept, even in the pending sign-up
+  if (!errors.length) v.pw_hash = await PW.hash(pw);                   // only the hash is kept, even in the pending sign-up
   if (!errors.length && g) {                       // Google path: no email code needed
     const err = await finishRegistration(req, res, v, g.email, key, 'google');
     if (!err) { req.session.g = null; return; }
@@ -392,6 +405,7 @@ router.post('/login', async (req, res) => {
     return loginPage(req, res, { err: 'That email and password do not match. Check them, or use “Forgot or set password” below; if you have not set a password yet, that is the way in.', email }, 401);
   }
   speakers.clearFails(['ep:' + key]);
+  if (PW.legacy(r.pw_hash)) PW.hash(password).then((h) => db.prepare('UPDATE registrations SET pw_hash=? WHERE id=? AND pw_hash=?').run(h, r.id, r.pw_hash)).catch(() => {});   // upgrade old bcrypt hash
   ppSignIn(req, res, r);
 });
 // forgotten password: email a 6-digit code → enter it → choose a new password
@@ -448,7 +462,7 @@ router.post('/login/reset', async (req, res) => {
   if (!csrfOk(req)) return again('Your session expired. Please try again.');
   const pw = String(req.body.password || ''), err = pw !== String(req.body.password2 || '') ? 'The two passwords do not match.' : speakers.checkPassword(pw, r);
   if (err) return again(err);
-  db.prepare('UPDATE registrations SET pw_hash=?, pw_set_at=? WHERE id=?').run(await bcrypt.hash(pw, 11), new Date().toISOString(), r.id);
+  db.prepare('UPDATE registrations SET pw_hash=?, pw_set_at=? WHERE id=?').run(await PW.hash(pw), new Date().toISOString(), r.id);
   speakers.clearFails(['ep:' + r.email_key]);
   ppSignIn(req, res, db.prepare('SELECT * FROM registrations WHERE id=?').get(r.id), r.pw_hash ? 'Your password has been changed.' : 'Your password is set. Next time, sign in with your email and password.');
 });
@@ -553,7 +567,7 @@ router.post('/account/password', requireReg, async (req, res) => {
   if (r.pw_hash && !(await speakers.verifyPassword({ pw_hash: r.pw_hash }, String(b.current || '')))) errs.push('Your current password is not correct.');
   const pw = String(b.password || ''); const pe = pw !== String(b.password2 || '') ? 'The two new passwords do not match.' : speakers.checkPassword(pw, r); if (pe) errs.push(pe);
   if (errs.length) { flash(req, '', errs); return res.redirect(cfg.base + '/account#password'); }
-  db.prepare('UPDATE registrations SET pw_hash=?, pw_set_at=? WHERE id=?').run(await bcrypt.hash(pw, 11), new Date().toISOString(), r.id);
+  db.prepare('UPDATE registrations SET pw_hash=?, pw_set_at=? WHERE id=?').run(await PW.hash(pw), new Date().toISOString(), r.id);
   setPP(req, db.prepare('SELECT id,pw_set_at FROM registrations WHERE id=?').get(r.id));
   flash(req, 'Your password has been changed. Other devices have been signed out.'); res.redirect(cfg.base + '/account#password');
 });
@@ -628,6 +642,7 @@ router.post('/speaker/login', async (req, res) => {
     return again('That email and password do not match. If you have not chosen a password yet, use the Accept invitation button in your invitation email, or reset your password.', 401);
   }
   speakers.clearFails(['e:' + key]);
+  if (PW.legacy(s.pw_hash)) PW.hash(password).then((h) => db.prepare('UPDATE speakers SET pw_hash=? WHERE id=? AND pw_hash=?').run(h, s.id, s.pw_hash)).catch(() => {});   // upgrade old bcrypt hash
   spkSignIn(req, res, s);
 });
 router.get('/speaker/forgot', (req, res) => html(res, spv.forgot({ csrf: csrfToken(req), email: String(req.query.email || '').slice(0, 160) })));
@@ -888,10 +903,15 @@ router.get('/admin', requireAdmin, (req, res) => {
   const total = where ? db.prepare(`SELECT COUNT(*) c FROM registrations ${where}`).get(...p).c : stats.total;
   const pages = Math.max(1, Math.ceil(total / f.per));
   const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
-  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,department,participation,paper_title,abstract,coauthors,pres_at,mass_no,diet,diet_note,dinner,billing,pay_source,pay_note,last_login,profile_at,pw_hash IS NOT NULL has_pw FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
+  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,department,participation,paper_title,abstract IS NOT NULL AND abstract<>'' abstract,coauthors,pres_at,mass_no,diet,diet_note,dinner,billing,pay_source,pay_note,last_login,profile_at,pw_hash IS NOT NULL has_pw FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
   html(res, adminViews.dashboard({ rows, stats, total, page, pages, f, cats: CATS, statuses: STATUSES, pays: PAYS, pers: PERS, qs: filterQS(f), csrf: csrfToken(req), flash: takeFlash(req) }));
 });
 
+router.get('/admin/participant/:id/abstract', requireAdmin, (req, res) => {    // loaded when a participant card is opened (keeps the list light)
+  const r = db.prepare('SELECT abstract FROM registrations WHERE id=?').get(parseInt(req.params.id, 10) || 0);
+  if (!r) return res.status(404).end();
+  res.set('Cache-Control', 'no-store').type('text/plain').send(r.abstract || '');
+});
 router.post('/admin/action', requireAdmin, (req, res) => {
   if (!csrfOk(req)) return res.status(400).send('Bad request');
   const act = String(req.body.action || '');
@@ -1176,5 +1196,5 @@ app.use((err, req, res, next) => { console.error(err); res.status(500).type('tex
 
 if (/YOUR-DOMAIN/.test(cfg.siteUrl)) console.warn('WARNING: set SITE_URL to your real public address (used in sitemap, canonical links and social previews).');
 // Always listen: hosts such as cPanel/Passenger load this file through their own loader (require.main !== module).
-app.listen(process.env.PORT || cfg.port, () => console.log(`${cfg.eventName} site running (port ${process.env.PORT || cfg.port}, base '${cfg.base}')`));
+app.listen(process.env.PORT || cfg.port, () => console.log(`${cfg.eventName} site running (port ${process.env.PORT || cfg.port}, base '${cfg.base}', ${(() => { try { return require('fs').readdirSync('/proc/self/task').length + ' threads'; } catch (_) { return 'threads n/a'; } })()})`));
 module.exports = app;
