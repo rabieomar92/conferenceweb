@@ -585,3 +585,135 @@ details.alt{margin-top:26px;padding-top:20px;border-top:1px solid var(--rule)}de
 #password details summary{cursor:pointer;color:var(--navy);font-weight:700}
 #password .pform{margin-top:20px}
 @media(max-width:900px){.dcard{padding:26px 20px}.two.t13{grid-template-columns:1fr}.acct aside{position:static}}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Typographic & colour refinement — “a well-made proceedings volume”
+   • Pagella throughout; true small caps (smcp/c2sc) instead of tracked capitals,
+     old-style figures in running text, lining tabular figures in data.
+   • Warm ivory paper, navy ink (logo), gold used sparingly as rules and accents,
+     a pale harbour-blue tint for quiet structure.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root{
+  --navy:#12285C;          /* logo navy — ink for headings, buttons */
+  --navy-mid:#24407C;
+  --amber-lt:#F2A900;      /* logo gold — rules, marks, highlights */
+  --amber:#946500;         /* gold darkened for text on ivory (WCAG AA) */
+  --paper:#FBF8F1;         /* warm ivory */
+  --paper-mid:#F3EEE3;
+  --mist:#EEF2F8;          /* harbour-blue tint */
+  --rule:#E3DCCB;
+  --text:#1E2638;          /* warm ink for reading */
+  --muted:#5D6880;
+}
+html{font-kerning:normal;text-rendering:optimizeLegibility}
+body{background:var(--paper);color:var(--text);font-size:18.5px;line-height:1.66;
+  font-feature-settings:"kern","liga","onum","pnum";-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,.lead,.band h2{text-wrap:balance;font-feature-settings:"kern","liga","lnum"}
+p,li{text-wrap:pretty}
+::selection{background:#FCE7A8;color:var(--navy)}
+:focus-visible{outline:2px solid var(--amber-lt);outline-offset:3px}
+
+/* small caps for every label, eyebrow, button and navigation item */
+.label,.sec-label h2,.top nav a,.btn,.b2,.b2l,.fld label.l,.facts span:first-child,.dtabs button span,.room .rn,
+th,.pst,.claim .l,.pform h3,.hero .theme span,.fees .fc small,.dnav b,.pgroup .label,.paysteps strong,.pb .wh,
+.lg-2,.pwshow,.gbox .or,.gok a,.stats span,.tag,.cd,.pmeth span,#qh-load .qh-msg,.sdg span{
+  text-transform:none!important;font-variant-caps:all-small-caps;font-feature-settings:"c2sc","smcp","kern","lnum";letter-spacing:.07em!important}
+.label{font-size:17px;font-weight:700;color:var(--amber)}
+.sec-label h2{font-size:19px;font-weight:700;color:var(--navy)}
+.sec-label .num{font-style:italic;font-size:22px;color:var(--amber);margin-bottom:2px;font-feature-settings:"onum"}
+.sec-label .num::before{content:"§\2009";font-style:normal}
+.top nav a{font-size:17.5px;font-weight:400;color:var(--muted)}
+.top nav a.pill{font-weight:700}
+.btn{font-size:18px;font-weight:700;letter-spacing:.06em!important;padding:17px 30px}
+.b2{font-size:16px;font-weight:700}
+.b2l{font-size:17.5px;font-weight:700}
+.fld label.l,.claim .l{font-size:16px;font-weight:700}
+.facts span:first-child{font-size:15.5px;font-weight:700;padding-top:1px}
+.room .rn{font-size:16px;font-weight:700}
+.dtabs button span{font-size:15px}
+.pst{font-size:15px}
+.pform h3{font-size:18px;color:var(--navy)}
+.hero .theme span{font-size:16px}
+.fees .fc small{font-size:15px}
+.dnav b{font-size:15px}
+.pgroup .label{font-size:15px;color:var(--muted)}
+.lg-2{font-size:.6em;margin-top:.18em}
+
+/* figures: lining + tabular where numbers are compared */
+.fp,.pamt b,.pb .bt,.room time,.fees .fn,.paysteps b,.refbox b,.facts span:last-child,.stats b,table,.codein,.tlist li::before,.meta .v{font-feature-settings:"kern","lnum","tnum"}
+
+/* reading rhythm */
+.lead{font-weight:400;font-size:clamp(27px,3vw,40px);line-height:1.24;letter-spacing:-.01em}
+.lead em{font-style:italic;color:var(--navy-mid);background:linear-gradient(transparent 62%,rgba(242,169,0,.32) 62%);padding:0 .05em}
+.body-txt{font-size:19.5px;line-height:1.7;max-width:62ch;color:#33405A}
+.hero h1{font-weight:700;letter-spacing:-.018em}
+.hero h1 .h-2 em{font-weight:400;color:var(--amber);letter-spacing:0}
+.hero .label{font-size:18px}
+.hero .label::before{background:var(--amber-lt)}
+.hero .theme{font-style:italic;color:var(--navy-mid);font-size:clamp(20px,1.8vw,25px)}
+.hero .theme span{font-style:normal}
+.hero canvas.lattice{opacity:.85}
+
+/* sections: ivory pages separated by hairlines; a harbour-blue band for the facts strip */
+section.s{padding:104px 0;border-bottom:1px solid var(--rule)}
+.meta{background:var(--mist);border-color:#DCE3EE}
+.meta .cell{border-color:#DCE3EE!important}
+.meta .label{color:var(--navy-mid)}
+#topics,#fees{background:#FFFDF8}
+.tlist li{font-size:19px;border-color:var(--rule)}
+.tlist li::before{background:transparent;border:1.5px solid var(--amber-lt);color:var(--amber);font-size:15px}
+.tlist li:hover{color:var(--navy-mid)}
+.sdg span{font-size:17px;background:#fff}
+
+/* programme: quieter, more like a printed timetable */
+.dtabs{background:#fff;border-color:var(--rule)}
+.dtabs button{font-size:18px}
+.pb{border-color:var(--rule)}
+.pb h4{font-size:20px}
+.pb.plenary,.pb.gala{background:var(--navy);border-left:4px solid var(--amber-lt)}
+.room{border-color:var(--rule);background:#fff}
+.room li{font-size:16px;border-color:#F0EBDF}
+.room b{font-weight:700}
+.cd{font-size:13.5px;letter-spacing:.04em!important}
+
+/* fees: a printed price list, not a sales table */
+.fees li{border-color:var(--rule)}
+.fees .fn{background:transparent;border:1.5px solid var(--navy);color:var(--navy);font-size:15px}
+.fees .fc{font-size:20px}
+.fees .fp{background:transparent;color:var(--navy);padding:0;font-size:21px;border-bottom:3px solid var(--amber-lt)}
+.paysteps{background:var(--mist);border-color:#DCE3EE}
+.paysteps div{border-color:#DCE3EE}
+.paysteps b{color:var(--amber);font-style:italic;font-weight:400;font-size:40px}
+.paysteps strong{font-size:18px}
+
+/* buttons */
+.btn{background:var(--navy);box-shadow:0 1px 0 rgba(18,40,92,.08)}
+.btn:hover{background:var(--navy-mid)}
+.btn span.arr{color:var(--amber-lt)}
+.btn:hover span.arr{color:var(--amber-lt)}
+.band{background:var(--navy)}
+.band h2{font-weight:400;font-style:normal}
+.band h2 em{font-style:italic}
+.band .btn{background:var(--amber-lt);color:var(--navy)}
+.band .btn:hover{background:#fff}
+
+/* forms & cards */
+form.f,div.f,.paycard,.dcard,.chg,.evbox{background:#fff;border-color:var(--rule)}
+.fld input[type=text],.fld input[type=email],.fld input[type=tel],.fld input[type=password],.fld select{font-size:20px;color:var(--navy);border-bottom-color:#D8D0BE}
+.fld .hint,.hint{font-size:15px;color:var(--muted)}
+.chips label,.feechips label{font-size:16.5px;border-color:#D8D0BE;background:#fff}
+.reg aside p{font-size:19px;color:#33405A}
+.facts div{font-size:17px;border-color:var(--rule)}
+.okmsg{font-size:17px}
+.err{font-size:17px}
+
+/* header & footer */
+.top{background:rgba(251,248,241,.94);border-color:var(--rule)}
+.brand .lg{font-size:24px}
+.partners{background:#FFFDF8;border-top:1px solid var(--rule)}
+footer.f{font-size:15px}
+.legal p,.legal li{font-size:18.5px}
+@media(max-width:900px){body{font-size:17.5px}.body-txt{font-size:18px}.btn{font-size:17px;padding:16px 24px}}
+.lg,.lg-1 i{font-feature-settings:"kern","lnum"}
+@media(max-width:1500px){.brand .lg-2{display:none}}
+.hero .label{line-height:1.35}
