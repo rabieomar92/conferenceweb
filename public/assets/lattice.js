@@ -23,14 +23,14 @@
     a = W < 700 ? 34 : 46;                                   // bond length
     atoms = []; bonds = [];
     var dx = a * Math.sqrt(3), dy = a * 1.5, idx = {};
-    var cols = Math.ceil(W / dx) + 3, rows = Math.ceil(H / dy) + 3;
-    for (var j = -1; j < rows; j++) for (var i = -1; i < cols; i++) {
+    var cols = Math.ceil(W / dx) + 3, rows = Math.ceil(H / dy) + 3, j0 = -Math.ceil(340 / dy) - 1;
+    for (var j = j0; j < rows; j++) for (var i = -1; i < cols; i++) {
       // honeycomb = triangular lattice with a two-atom basis (A, B)
       var x = i * dx + (j % 2 ? dx / 2 : 0), y = j * dy;
       idx[i + ',' + j + ',A'] = atoms.push({ x: x, y: y, s: 0 }) - 1;
       idx[i + ',' + j + ',B'] = atoms.push({ x: x, y: y + a, s: 1 }) - 1;
     }
-    for (var j2 = -1; j2 < rows; j2++) for (var i2 = -1; i2 < cols; i2++) {
+    for (var j2 = j0; j2 < rows; j2++) for (var i2 = -1; i2 < cols; i2++) {
       var A = idx[i2 + ',' + j2 + ',A'], Bb = idx[i2 + ',' + j2 + ',B'];
       if (A !== undefined && Bb !== undefined) bonds.push([A, Bb]);
       // B atom bonds to the two A atoms of the row below
@@ -46,16 +46,17 @@
     var t = still ? 0 : (now - t0) / 1000;
     g.clearRect(0, 0, W, H);
     var kx = 2 * Math.PI / (a * 7.5), ky = 2 * Math.PI / (a * 11), w = 0.55, amp = a * 0.09;
+    var off = still ? 0 : Math.min(340, (window.pageYOffset || 0) * 0.35);   // drifts slower than the page: depth
     var P = atoms.map(function (p) {
       var ph = kx * p.x + ky * p.y - w * t;
       var ux = amp * Math.sin(ph), uy = amp * 0.6 * Math.cos(ph * 0.9 + p.s);
       for (var k = 0; k < pulses.length; k++) {                     // pointer ripples
-        var q = pulses[k], d = Math.hypot(p.x - q.x, p.y - q.y), age = (now - q.t) / 1000, front = age * 260;
+        var q = pulses[k], d = Math.hypot(p.x - q.x, p.y + off - q.y), age = (now - q.t) / 1000, front = age * 260;
         var e = Math.exp(-Math.pow((d - front) / 40, 2)) * Math.exp(-age * 1.6) * a * 0.22;
-        if (e > 0.05 && d > 1) { ux += (p.x - q.x) / d * e; uy += (p.y - q.y) / d * e; }
+        if (e > 0.05 && d > 1) { ux += (p.x - q.x) / d * e; uy += (p.y + off - q.y) / d * e; }
       }
-      var hx = Math.hypot(p.x - mx, p.y - my), glow = Math.max(0, 1 - hx / (a * 3.2));
-      return { x: p.x + ux, y: p.y + uy, f: fade(p.x, p.y), glow: glow, ph: ph };
+      var hx = Math.hypot(p.x - mx, p.y + off - my), glow = Math.max(0, 1 - hx / (a * 3.2));
+      return { x: p.x + ux, y: p.y + uy + off, f: fade(p.x, p.y + off), glow: glow, ph: ph };
     });
     g.lineWidth = 1.1;
     for (var b = 0; b < bonds.length; b++) {

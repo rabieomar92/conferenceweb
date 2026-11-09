@@ -961,3 +961,14 @@ form.f,div.f,.paycard,.dcard,.chg,.evbox{background:#fff;border:1px solid var(--
 .pgroup img.us{height:50px}
 @media(max-width:900px){.bl i{display:none}}
 @media(max-width:560px){.brand .bl .bl-s{height:34px}.meta .v img.org-logo{height:52px}.pgroup img.sp{height:54px}.pgroup img.us{height:42px}}
+
+/* depth on scroll (see parallax.js) */
+[data-plx]{will-change:transform}
+.hero .hcopy{will-change:transform,opacity}
+.js .rv{opacity:0;transform:translate3d(0,22px,0);transition:opacity .8s cubic-bezier(.2,.6,.2,1),transform .8s cubic-bezier(.2,.6,.2,1)}
+.js .rv.in{opacity:1;transform:none}
+.js .sdg li{transition-delay:0s}
+.js .in .sdg li,.js .in .tlist li{animation:rise .7s cubic-bezier(.2,.6,.2,1) both}
+.js .in .sdg li:nth-child(2){animation-delay:.08s}.js .in .sdg li:nth-child(3){animation-delay:.16s}.js .in .sdg li:nth-child(4){animation-delay:.24s}
+@keyframes rise{from{opacity:0;transform:translate3d(0,16px,0)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.js .rv{opacity:1;transform:none;transition:none}.js .in .sdg li,.js .in .tlist li{animation:none}}
