@@ -881,14 +881,14 @@ router.get('/admin', requireAdmin, (req, res) => {
   const total = where ? db.prepare(`SELECT COUNT(*) c FROM registrations ${where}`).get(...p).c : stats.total;
   const pages = Math.max(1, Math.ceil(total / f.per));
   const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
-  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,participation,pw_hash IS NOT NULL has_pw FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
+  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,department,participation,paper_title,abstract,coauthors,pres_at,mass_no,diet,diet_note,dinner,billing,pay_source,pay_note,last_login,profile_at,pw_hash IS NOT NULL has_pw FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
   html(res, adminViews.dashboard({ rows, stats, total, page, pages, f, cats: CATS, statuses: STATUSES, pays: PAYS, pers: PERS, qs: filterQS(f), csrf: csrfToken(req), flash: takeFlash(req) }));
 });
 
 router.post('/admin/action', requireAdmin, (req, res) => {
   if (!csrfOk(req)) return res.status(400).send('Bad request');
   const act = String(req.body.action || '');
-  const back = (() => { const f = adminFilter(req.body).f; const x = filterQS(f, { page: parseInt(req.body.page, 10) > 1 ? parseInt(req.body.page, 10) : '' }); return cfg.base + '/admin' + (x ? '?' + x : ''); })();
+  const back = req.body.back === 'payments' ? cfg.base + '/admin/payments' : (() => { const f = adminFilter(req.body).f; const x = filterQS(f, { page: parseInt(req.body.page, 10) > 1 ? parseInt(req.body.page, 10) : '' }); return cfg.base + '/admin' + (x ? '?' + x : ''); })();
   const now = new Date().toISOString();
   const run = (sqlSet, params) => {                              // apply to the selected ids, or to everything matching the filter
     if (req.body.scope === 'all') {
@@ -989,7 +989,7 @@ function matchImport(text) {
   }
   return out;
 }
-router.get('/admin/payments', requireAdmin, (req, res) => html(res, adminViews.payments({ csrf: csrfToken(req), flash: takeFlash(req), t2u: cfg.ticket2uUrl, fees: cfg.fees, st: { on: stripe.configured(), mode: stripe.mode(), hook: !!cfg.stripe.webhookSecret, url: views.SITE + '/stripe/webhook', provider: cfg.payProvider, bad: cfg.fees.filter((f) => !stripe.parseFee(f.fee)).map((f) => f.name) }, paidBy: db.prepare("SELECT pay_source s, COUNT(*) n FROM registrations WHERE pay_status='paid' GROUP BY pay_source").all(), claimed: db.prepare("SELECT id,ref,full_name,email,category,fee,pay_ref,pay_claimed_at FROM registrations WHERE pay_status='claimed' ORDER BY pay_claimed_at LIMIT 500").all() })));
+router.get('/admin/payments', requireAdmin, (req, res) => html(res, adminViews.payments({ counts: db.prepare("SELECT COALESCE(SUM(pay_status='paid'),0) paid, COALESCE(SUM(pay_status='waived'),0) waived, COALESCE(SUM(pay_status='claimed'),0) claimed, COALESCE(SUM(pay_status='unpaid'),0) unpaid FROM registrations").get(), csrf: csrfToken(req), flash: takeFlash(req), t2u: cfg.ticket2uUrl, fees: cfg.fees, st: { on: stripe.configured(), mode: stripe.mode(), hook: !!cfg.stripe.webhookSecret, url: views.SITE + '/stripe/webhook', provider: cfg.payProvider, bad: cfg.fees.filter((f) => !stripe.parseFee(f.fee)).map((f) => f.name) }, paidBy: db.prepare("SELECT pay_source s, COUNT(*) n FROM registrations WHERE pay_status='paid' GROUP BY pay_source").all(), claimed: db.prepare("SELECT id,ref,full_name,email,category,fee,pay_ref,pay_claimed_at FROM registrations WHERE pay_status='claimed' ORDER BY pay_claimed_at LIMIT 500").all() })));
 router.post('/admin/payments/import', express.json({ limit: '8mb' }), requireAdmin, (req, res) => {
   if (!csrfOk(req)) return res.status(400).json({ ok: false, error: 'Session expired. Reload the page.' });
   const r = matchImport(req.body && req.body.csv);
