@@ -1162,7 +1162,7 @@ router.get('/sitemap.xml', (req, res) => {
   const day = new Date().toISOString().slice(0, 10);
   const urls = [['/', '1.0', 'daily'], ['/register', '0.9', 'weekly'], ['/speakers', '0.8', 'weekly'], ...speakers.published().map((x) => ['/speakers/' + x.slug, '0.7', 'weekly']), ['/privacy', '0.3', 'yearly'], ['/terms', '0.3', 'yearly']];
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n` +
-    urls.map(([u, p, c]) => `  <url><loc>${views.SITE}${u === '/' ? '/' : u}</loc><lastmod>${day}</lastmod><changefreq>${c}</changefreq><priority>${p}</priority>${u === '/' ? `<image:image><image:loc>${views.SITE}/assets/og-image.png</image:loc><image:title>ICSSST 2027 — International Conference on Solid State Science and Technology</image:title></image:image>` : ''}</url>`).join('\n') + `\n</urlset>\n`);
+    urls.flatMap(([u, p, c]) => [[u, p, c], [u + '?lang=ms', String(Math.max(0.1, p - 0.1).toFixed(1)), c]]).map(([u, p, c]) => `  <url><loc>${views.SITE}${u === '/' ? '/' : u.replace(/^\/\?/, '/?')}</loc><lastmod>${day}</lastmod><changefreq>${c}</changefreq><priority>${p}</priority>${u === '/' ? `<image:image><image:loc>${views.SITE}/assets/og-image.png</image:loc><image:title>ICSSST 2027 — International Conference on Solid State Science and Technology</image:title></image:image>` : ''}</url>`).join('\n') + `\n</urlset>\n`);
 });
 if (cfg.googleVerifyFile && /^google[a-z0-9]+\.html$/i.test(cfg.googleVerifyFile)) {
   router.get('/' + cfg.googleVerifyFile, (req, res) => res.type('text/html').send('google-site-verification: ' + cfg.googleVerifyFile));
