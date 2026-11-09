@@ -46,7 +46,13 @@ Participants pay on **Stripe Checkout** from their *My registration* page: cards
 Zoho SMTP (`SMTP_PASS`, or save it in Admin → Settings). Google sign-in needs `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` with redirect URI `SITE_URL/auth/google/callback`.
 
 ## SEO
-`/robots.txt`, `/sitemap.xml`, canonical/Open Graph tags and schema.org `Event` data (with fee offers). Verify in Google Search Console with `GOOGLE_SITE_VERIFICATION` or `GOOGLE_VERIFY_FILE`.
+`/robots.txt` (open to Google, Bing, Yahoo, DuckDuckGo, Yandex, Baidu and Apple; sign-in and private pages excluded), `/sitemap.xml` (with image), canonical/Open Graph/keyword tags, and schema.org data (`Event` with fee offers, `WebSite`, organiser, `FAQPage` matching the Questions section).
+
+Getting indexed:
+1. Make sure `SITE_URL=https://icssst.usmphysics.org` is set, otherwise the sitemap and canonical links point to a placeholder.
+2. Google Search Console → add the domain → paste the verification code in Admin → Settings → Site (or `GOOGLE_SITE_VERIFICATION`) → submit `https://icssst.usmphysics.org/sitemap.xml`.
+3. Bing Webmaster Tools (also feeds Yahoo and DuckDuckGo) → import from Google Search Console, or paste the `msvalidate.01` code in Admin → Settings (`BING_SITE_VERIFICATION`) → submit the sitemap.
+4. IndexNow: in production the site notifies Bing, Yahoo, Yandex and others about its public pages a minute after each start; the key file is served automatically (`INDEXNOW_KEY` optional).
 
 ## Logo
 `public/assets/icssst-logo.svg` is a flat-colour vector redraw of the ICSSST 2027 logo (navy, gold and a few flat steps; no gradients),

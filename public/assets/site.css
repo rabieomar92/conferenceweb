@@ -1158,3 +1158,11 @@ html:not(.tabs-on) .dform{display:block}
 /* header: logos only (the event name is in the hero) */
 .top .brand .lg,.top .brand .bl i{display:none!important}
 .top .brand{margin-right:24px}
+/* questions (also published as FAQ structured data) */
+.faq{border-top:1px solid var(--navy)}
+.faq details{border-bottom:1px solid var(--rule)}
+.faq summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:baseline;gap:20px;padding:18px 0;font-size:19px;font-weight:700;color:var(--navy)}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";flex:none;font-weight:400;font-size:24px;line-height:1;color:var(--amber);transition:transform .25s}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq details p{margin:0 0 20px;max-width:62ch;color:var(--ink)}

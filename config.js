@@ -20,7 +20,10 @@ module.exports = {
   trustProxy: env.TRUST_PROXY ? Number(env.TRUST_PROXY) : 1,
 
   googleVerification: env.GOOGLE_SITE_VERIFICATION || '',   // content of Google Search Console <meta> verification tag
-  googleVerifyFile: env.GOOGLE_VERIFY_FILE || '',           // or the file name Google gives you, e.g. google1234abcd.html
+  googleVerifyFile: env.GOOGLE_VERIFY_FILE || '',
+  bingVerification: env.BING_SITE_VERIFICATION || '',           // msvalidate.01 meta tag content (Bing, Yahoo, DuckDuckGo)
+  yandexVerification: env.YANDEX_VERIFICATION || '',
+  indexNowKey: env.INDEXNOW_KEY || '',                      // optional; derived from the session secret when empty           // or the file name Google gives you, e.g. google1234abcd.html
 
   eventName: 'ICSSST 2027',
   eventFull: '11th International Conference on Solid State Science and Technology',

@@ -1128,18 +1128,34 @@ router.get('/admin/export.csv', requireAdmin, (req, res) => {
   res.end();
 });
 
-// ── SEO: robots, sitemap, Google verification ────────────
+// ── SEO: robots, sitemap, search-engine verification, IndexNow ────────────
 app.use(cfg.base || '/', (req, res, next) => {
-  if (/^\/(admin|verify|auth|captcha\.svg|speaker(\/|$))/.test(req.path) || (req.path === '/register' && req.query.done !== undefined)) res.set('X-Robots-Tag', 'noindex, nofollow');
+  if (/^\/(admin|verify|auth|captcha\.svg|account|login|forgot|reset|speaker(\/|$))/.test(req.path) || (req.path === '/register' && req.query.done !== undefined)) res.set('X-Robots-Tag', 'noindex, nofollow');
   next();
 });
-router.get('/robots.txt', (req, res) => res.type('text/plain').send(
-  `User-agent: *\nAllow: /\nDisallow: ${cfg.base}/admin\nDisallow: ${cfg.base}/verify\nDisallow: ${cfg.base}/auth\nDisallow: ${cfg.base}/captcha.svg\nDisallow: ${cfg.base}/speaker$\nDisallow: ${cfg.base}/speaker/\n\nSitemap: ${views.SITE}/sitemap.xml\n`));
+const ROBOTS_BLOCK = ['/admin', '/verify', '/auth', '/captcha.svg', '/account', '/login', '/forgot', '/reset', '/speaker$', '/speaker/', '/mail-test', '/*?done='].map((x) => `Disallow: ${cfg.base}${x}`).join('\n');
+router.get('/robots.txt', (req, res) => res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(
+  // the public pages are open to every search engine; private and sign-in pages are kept out of results
+  ['*', 'Googlebot', 'Bingbot', 'Slurp', 'DuckDuckBot', 'YandexBot', 'Baiduspider', 'Applebot'].map((ua) => `User-agent: ${ua}\nAllow: ${cfg.base || ''}/\n${ROBOTS_BLOCK}\n`).join('\n') +
+  `\nSitemap: ${views.SITE}/sitemap.xml\n`));
+// IndexNow (Bing, Yahoo, Yandex, Seznam, Naver): tells those engines about new or changed pages straight away
+const INDEXNOW_KEY = cfg.indexNowKey || require('crypto').createHash('sha256').update(String(SECRET) + 'indexnow').digest('hex').slice(0, 32);
+router.get('/' + INDEXNOW_KEY + '.txt', (req, res) => res.type('text/plain').send(INDEXNOW_KEY));
+function publicUrls() { return ['/', '/register', '/speakers', ...speakers.published().map((x) => '/speakers/' + x.slug), '/privacy', '/terms'].map((u) => views.SITE + u); }
+async function pingIndexNow() {
+  if (!/^https:\/\//.test(views.SITE) || /YOUR-DOMAIN|localhost/.test(views.SITE) || process.env.NODE_ENV !== 'production') return;
+  try {
+    const r = await fetch('https://api.indexnow.org/indexnow', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ host: new URL(views.SITE).host, key: INDEXNOW_KEY, keyLocation: `${views.SITE}/${INDEXNOW_KEY}.txt`, urlList: publicUrls() }) });
+    console.log('IndexNow: submitted', publicUrls().length, 'pages, status', r.status);
+  } catch (err) { console.warn('IndexNow: not sent (' + err.message + ')'); }
+}
+setTimeout(pingIndexNow, 60e3).unref();
 router.get('/sitemap.xml', (req, res) => {
   const day = new Date().toISOString().slice(0, 10);
-  const urls = [['/', '1.0'], ['/register', '0.9'], ['/speakers', '0.8'], ...speakers.published().map((x) => ['/speakers/' + x.slug, '0.7']), ['/privacy', '0.3'], ['/terms', '0.3']];
-  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-    urls.map(([u, p]) => `  <url><loc>${views.SITE}${u === '/' ? '/' : u}</loc><lastmod>${day}</lastmod><changefreq>weekly</changefreq><priority>${p}</priority></url>`).join('\n') + `\n</urlset>\n`);
+  const urls = [['/', '1.0', 'daily'], ['/register', '0.9', 'weekly'], ['/speakers', '0.8', 'weekly'], ...speakers.published().map((x) => ['/speakers/' + x.slug, '0.7', 'weekly']), ['/privacy', '0.3', 'yearly'], ['/terms', '0.3', 'yearly']];
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n` +
+    urls.map(([u, p, c]) => `  <url><loc>${views.SITE}${u === '/' ? '/' : u}</loc><lastmod>${day}</lastmod><changefreq>${c}</changefreq><priority>${p}</priority>${u === '/' ? `<image:image><image:loc>${views.SITE}/assets/og-image.png</image:loc><image:title>ICSSST 2027 — International Conference on Solid State Science and Technology</image:title></image:image>` : ''}</url>`).join('\n') + `\n</urlset>\n`);
 });
 if (cfg.googleVerifyFile && /^google[a-z0-9]+\.html$/i.test(cfg.googleVerifyFile)) {
   router.get('/' + cfg.googleVerifyFile, (req, res) => res.type('text/html').send('google-site-verification: ' + cfg.googleVerifyFile));
