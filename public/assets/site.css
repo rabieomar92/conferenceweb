@@ -1106,7 +1106,7 @@ html:not(.tabs-on) .dform{display:block}
 @keyframes cue{0%{transform:translateY(0);opacity:0}25%{opacity:1}100%{transform:translateY(50px);opacity:0}}
 @media(max-width:860px){
   .hero .hgrid{grid-template-columns:1fr;gap:10px}.hscroll{display:none}
-  .hero .mark{order:-1;max-width:min(420px,86vw);justify-self:center;padding:7vw 0 4vw}
+  .hero .mark{order:-1;max-width:min(420px,86vw);justify-self:center;padding:16vw 0 3vw}
   .hero-sun{left:62%;top:26%}
   .hero h1{font-size:clamp(32px,8.6vw,48px)!important}
 }
@@ -1115,3 +1115,7 @@ html:not(.tabs-on) .dform{display:block}
 .back.tosite:hover{color:var(--navy);border-bottom-color:var(--navy)}
 .hero h1{display:block!important}
 .hero .mark{position:relative}.hero .mark::before{content:"";position:absolute;inset:-14% -10%;z-index:-1;background:radial-gradient(closest-side,rgba(251,250,247,.92) 55%,rgba(251,250,247,0));pointer-events:none}
+
+.hero .mark{--x:0}
+.lk-gold,.hscroll{display:none!important}
+@media(max-width:860px){.hero .mark::before{inset:0 -2%;background:radial-gradient(closest-side,rgba(251,250,247,.55) 50%,rgba(251,250,247,0))}}

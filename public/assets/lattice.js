@@ -59,7 +59,7 @@
     F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25);
     stack = innerWidth <= 860; textTop = H;
     var hc = stick.querySelector('.hcopy'); if (stack && hc) textTop = Math.max(160, hc.getBoundingClientRect().top - r.top);
-    F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25); if (stack) F = Math.min(W * 1.0, textTop * 1.25);
+    F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25); if (stack) F = Math.min(W * 1.1, textTop * 1.5);
     hh = header ? header.offsetHeight : 69;
     pin = !still && innerWidth > 860 && innerHeight >= 620;
     de.classList.toggle('hp-on', pin);
@@ -98,8 +98,8 @@
       var dx = sx - px, dy = sy - py, dd = Math.hypot(dx, dy), push = 0, near = 0;
       if (dd < 150) { near = 1 - dd / 150; push = near * near * 26 / (dd + 1); sx += dx * push; sy += dy * push; }
       var al = clamp(u * 1.4) * smooth(0.7, 1.7, dz) * (1 - smooth(20, 34, dz)) * (0.45 + 0.55 * smooth(maskB, maskA + 0.08, sx / W));
-      if (W < 760) al *= 0.4;
-      if (stack) al *= 1 - smooth(textTop - 70, textTop - 6, sy);   // never draw lattice over the copy
+      if (W < 760) al *= 0.8;
+      if (stack) al *= 1 - smooth(textTop - 40, textTop - 4, sy);   // never draw lattice over the copy
       var ex = (sx - cx0) / (W * 0.26), ey = (sy - cy) / (H * 0.3), ed = Math.sqrt(ex * ex + ey * ey);
       al *= 1 - (1 - 0.18 - 0.82 * smooth(0.55, 1.25, ed)) * (1 - ep) * (W < 760 ? 0 : 1);   // a clear pool of paper behind the logo, filling in as the camera dives
       if (al < 0.01) { q.f = 0; continue; }
