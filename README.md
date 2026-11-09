@@ -47,3 +47,9 @@ Zoho SMTP (`SMTP_PASS`, or save it in Admin → Settings). Google sign-in needs 
 
 ## SEO
 `/robots.txt`, `/sitemap.xml`, canonical/Open Graph tags and schema.org `Event` data (with fee offers). Verify in Google Search Console with `GOOGLE_SITE_VERIFICATION` or `GOOGLE_VERIFY_FILE`.
+
+## Logo
+`public/assets/icssst-logo.svg` is a flat-colour vector redraw of the ICSSST 2027 logo (navy, gold and a few flat steps; no gradients),
+with all lettering in TeX Gyre Pagella Bold converted to outlines. `icssst-mark.svg` is the artwork without text.
+Rebuild or tweak it with `python3 scripts/logo/build_logo.py` (needs `pip install fonttools uharfbuzz` and the Pagella OTF);
+the colours are in `PALETTE` at the top of the script.
