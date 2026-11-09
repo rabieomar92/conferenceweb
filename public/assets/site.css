@@ -1029,7 +1029,7 @@ html:not(.tabs-on) .dpanel2{margin-bottom:40px}
 .dash .pst{font-size:14.5px;font-weight:700;padding:4px 12px;border:1px solid var(--rule);border-radius:999px;background:#fff;color:var(--ink-2)}
 .dash .pst.ok{color:#2F6B35;border-color:#9CC8A0;background:#F1F8F2}.dash .pst.due{color:#9A5B00;border-color:#EBC46E;background:#FFF8E6}.dash .pst.chk{color:#24508F;border-color:#A8C0E6;background:#F1F5FC}
 .dash .paycard,.dash .evbox{max-width:none}
-.dash .dcard#profile,.dash .dcard#certificate,.dash .dcard#password{margin:0}
+.dash .dcard#profile,.dash .dcard#certificate,.dash .dcard#pwcard{margin:0}
 
 /* printable receipt */
 body.rcpt{background:#fff}
@@ -1070,3 +1070,8 @@ html:not(.tabs-on) .dform{display:block}
 .dash form.f.dform{border:0;padding:0;background:transparent;box-shadow:none;max-width:none;margin:0}
 .dash .dform .savebar{margin:22px 0 0;padding:14px 0}
 .dash textarea{line-height:1.55}
+
+/* header when signed in */
+.top nav .n-act form.lo{display:inline-flex;margin:0}
+.top nav .n-act button.pill{font:inherit;font-weight:700;cursor:pointer;background:#fff;color:var(--navy);border:1px solid var(--navy);padding:9px 18px;border-radius:2px;line-height:inherit}
+.top nav .n-act button.pill:hover{background:var(--navy);color:#fff}

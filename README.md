@@ -40,7 +40,7 @@ Participants pay on **Stripe Checkout** from their *My registration* page: cards
 `lib/programme.js` holds the draft programme (3 days, 4 rooms). Day 1–3 follow the event dates set in Admin → Settings.
 
 ## Admin
-`/admin/login` – user `admin`. Set the password with `npm run hash -- "NEW-PASSWORD"` → `ADMIN_HASH`, or change it in Admin → Settings.
+`/admin/login` – user `admin`. In production, organiser sign-in stays switched off until you set a private password: set `ADMIN_HASH` (create it with `npm run hash -- "NEW-PASSWORD"`), or change it in Admin → Settings.
 
 ## Email and Google sign-in
 Zoho SMTP (`SMTP_PASS`, or save it in Admin → Settings). Google sign-in needs `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` with redirect URI `SITE_URL/auth/google/callback`.

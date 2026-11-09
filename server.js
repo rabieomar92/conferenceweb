@@ -59,7 +59,10 @@ const csrfOk = (req) => {
 };
 const seatsTaken = () => db.prepare('SELECT COUNT(*) c FROM registrations').get().c;
 const seatsLeft = () => Math.max(0, cfg.seatLimit - seatsTaken());
-const requireAdmin = (req, res, next) => (req.session.admin ? next() : res.redirect(cfg.base + '/admin/login'));
+const DEFAULT_ADMIN_HASH = '$2b$12$yIUnLxFZjgLscFLScT/OUe7lJqmO0cqyNZoDeEYq4KNs9cPqKth4u';
+const adminTag = () => crypto.createHmac('sha256', SECRET).update(cfg.adminUser + '|' + cfg.adminHash).digest('hex').slice(0, 20);   // changes when the admin password changes: older sessions stop working
+const adminDefault = () => cfg.adminHash === DEFAULT_ADMIN_HASH && process.env.NODE_ENV === 'production';
+const requireAdmin = (req, res, next) => (req.session.admin && req.session.av === adminTag() && !adminDefault() ? next() : (req.session = null, res.redirect(cfg.base + '/admin/login')));
 const hmac = (s) => crypto.createHmac('sha256', SECRET).update(s).digest('hex');
 const safeEq = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 function newRef() {
@@ -71,7 +74,28 @@ function newRef() {
 }
 const flash = (req, ok, err) => { req.session.flash = { ok: ok || '', err: [].concat(err || []) }; };
 const takeFlash = (req) => { const f = req.session.flash; req.session.flash = null; return f || { ok: '', err: [] }; };
-const html = (res, body, status = 200) => res.status(status).type('html').set('Cache-Control', 'no-store').send(body);
+// the header and the home-page buttons depend on who is signed in: shown here, so every page gets them
+function viewer(req) {
+  const s = (req && req.session) || {}, B = cfg.base;
+  if (s.admin) return { href: B + '/admin', label: 'Admin', out: B + '/admin/logout' };
+  if (s.pp) return { href: B + '/account', label: 'My dashboard', out: B + '/logout' };
+  if (s.spk) return { href: B + '/speaker', label: 'Speaker dashboard', out: B + '/speaker/logout' };
+  return null;
+}
+function authNav(req) {
+  const w = viewer(req), B = cfg.base;
+  if (!w) return `<a class="login" href="${B}/login">Log in</a><a class="pill" href="${B}/register">Register</a>`;
+  return `<a class="login" href="${w.href}">${w.label}</a><form class="lo" method="post" action="${w.out}"><input type="hidden" name="csrf" value="${csrfToken(req)}"><button class="pill" type="submit">Log out</button></form>`;
+}
+const html = (res, body, status = 200) => {
+  if (body.includes('<!--')) {
+    const w = viewer(res.req), B = cfg.base;
+    body = body.replace('<!--AUTHNAV-->', () => authNav(res.req))
+      .replace('<!--HEROCTA-->', () => (w ? `<a class="btn" href="${w.href}">Go to my dashboard</a>` : `<a class="btn" href="${B}/register">Register now</a><a class="b2l" href="${B}/login">Already registered? Log in</a>`))
+      .replace('<!--HEROCTA2-->', () => `<a class="b2l" href="${w ? w.href : B + '/login'}">${w ? 'Go to my dashboard' : 'Log in'}</a>`);
+  }
+  return res.status(status).type('html').set('Cache-Control', 'no-store').send(body);
+};
 
 // ── captcha (server-side, single use) ─────────────────────
 const captchas = new Map(); // id -> { h, t }
@@ -95,7 +119,7 @@ router.get('/register', (req, res) => {
   const g = googleUser(req);
   if (g) {                                                                             // this Google account already registered → open its page
     const r = db.prepare('SELECT id FROM registrations WHERE email_key=?').get(normaliseEmail(g.email));
-    if (r) { req.session.g = null; req.session.pp = r.id; return res.redirect(cfg.base + '/account'); }
+    if (r) { req.session.g = null; setPP(req, r); return res.redirect(cfg.base + '/account'); }
   }
   const errors = req.session.gerr ? [req.session.gerr] : []; req.session.gerr = null;
   html(res, views.register({ errors, left: seatsLeft(), cats: CATS, csrf: csrfToken(req), now: Math.floor(Date.now() / 1000), v: { country: 'Malaysia', full_name: g ? g.name : '', email: g ? g.email : '' }, google: g, googleOn: googleOn() }));
@@ -183,7 +207,7 @@ async function finishRegistration(req, res, d, email, key, method) {
     d.fee = fee;
   } catch (ex) { return /UNIQUE/.test(String(ex.message)) ? 'This email address is already registered. Sign in to your registration page to pay or check your status.' : 'Something went wrong. Please try again.'; }
   const id = db.prepare('SELECT id FROM registrations WHERE ref=?').get(ref).id;
-  req.session.pid = null; req.session.pp = id;                                         // signed in: straight to payment
+  req.session.pid = null; setPP(req, db.prepare('SELECT id,pw_set_at FROM registrations WHERE id=?').get(id));                                         // signed in: straight to payment
   if (cfg.sendConfirmation) try {
     const m = mail.confirmEmail({ name: d.full_name, ref, organisation: d.organisation, category: d.category, fee: d.fee });
     await mail.send({ to: email, subject: m.subject, text: m.text, html: m.html });
@@ -331,11 +355,16 @@ router.post('/register/cancel', (req, res) => {
 
 
 // ── participants: sign in with an emailed code (or Google), “My registration”, Ticket2U payment ──
-const currentReg = (req) => (req.session.pp ? db.prepare('SELECT * FROM registrations WHERE id=?').get(req.session.pp) : null);
+const currentReg = (req) => {
+  if (!req.session.pp) return null;
+  const r = db.prepare('SELECT * FROM registrations WHERE id=?').get(req.session.pp);
+  return r && (req.session.pv || '') === (r.pw_set_at || '') ? r : null;        // a password change signs out every other device
+};
+const setPP = (req, r) => { req.session.pp = r.id; req.session.pv = r.pw_set_at || ''; };
 const requireReg = (req, res, next) => { const r = currentReg(req); if (!r) { req.session.pp = null; return res.redirect(cfg.base + '/login'); } req.reg = r; next(); };
 const ppSignIn = (req, res, r, welcome) => {
   db.prepare('UPDATE registrations SET last_login=? WHERE id=?').run(new Date().toISOString(), r.id);
-  req.session = { pp: r.id, csrf: crypto.randomBytes(24).toString('hex') };              // fresh session on sign-in
+  req.session = { pp: r.id, pv: r.pw_set_at || '', csrf: crypto.randomBytes(24).toString('hex') };              // fresh session on sign-in
   if (welcome) flash(req, welcome);
   res.redirect(cfg.base + '/account');
 };
@@ -353,7 +382,7 @@ router.post('/login', async (req, res) => {
   const ok = await speakers.verifyPassword(r ? { pw_hash: r.pw_hash } : null, password);
   if (!ok) {
     speakers.fail(keys);
-    return loginPage(req, res, { err: r && !r.pw_hash ? 'You have not set a password yet. Use “Forgot or set password” below and we will email you a code.' : 'That email and password do not match. Check them, or use “Forgot or set password”.', email }, 401);
+    return loginPage(req, res, { err: 'That email and password do not match. Check them, or use “Forgot or set password” below; if you have not set a password yet, that is the way in.', email }, 401);
   }
   speakers.clearFails(['ep:' + key]);
   ppSignIn(req, res, r);
@@ -369,7 +398,7 @@ async function sendLoginCode(req, key) {
   db.prepare('INSERT INTO login_codes (email_key,code_hash,expires_at,attempts,last_sent) VALUES (?,?,?,0,?) ON CONFLICT(email_key) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, attempts=0, last_sent=excluded.last_sent')
     .run(key, codeHash('pp:' + key, code), t + cfg.codeMinutes * 60, t);
   const m = mail.loginCodeEmail({ name: r.full_name, code });
-  await mail.send({ to: r.email, subject: m.subject, text: m.text, html: m.html });
+  mail.send({ to: r.email, subject: m.subject, text: m.text, html: m.html }).catch((ex) => console.error('Reset code email failed:', ex.message));   // not awaited: same response time for every address
 }
 router.get('/login/forgot', (req, res) => forgotPage(req, res, { email: String(req.query.email || '').slice(0, 160) }));
 router.post('/login/forgot', async (req, res) => {
@@ -414,7 +443,7 @@ router.post('/login/reset', async (req, res) => {
   if (err) return again(err);
   db.prepare('UPDATE registrations SET pw_hash=?, pw_set_at=? WHERE id=?').run(await bcrypt.hash(pw, 11), new Date().toISOString(), r.id);
   speakers.clearFails(['ep:' + r.email_key]);
-  ppSignIn(req, res, r, r.pw_hash ? 'Your password has been changed.' : 'Your password is set. Next time, sign in with your email and password.');
+  ppSignIn(req, res, db.prepare('SELECT * FROM registrations WHERE id=?').get(r.id), r.pw_hash ? 'Your password has been changed.' : 'Your password is set. Next time, sign in with your email and password.');
 });
 router.post('/logout', (req, res) => { req.session = null; res.redirect(cfg.base + '/login'); });
 router.get('/account', requireReg, (req, res) => { if (req.query.cancelled !== undefined) flash(req, '', 'Payment cancelled — nothing was charged. You can try again whenever you are ready.'); const pform = req.session.pform || null; req.session.pform = null; const prform = req.session.prform || null; req.session.prform = null; html(res, views.account({ pform, prform, r: req.reg, csrf: csrfToken(req), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined, modes: payModes(), stripeAmount: (() => { const p = stripe.parseFee(req.reg.fee); return p ? stripe.money(p.currency, p.amount) : ''; })() })); });
@@ -491,7 +520,7 @@ router.post('/account/profile', requireReg, (req, res) => {
   // name (printed on the certificate) is locked once a certificate has been issued
   let name = r.full_name;
   if (!r.cert_issued_at) { name = String(b.full_name || '').replace(/\s+/g, ' ').trim().slice(0, 120); if (name.length < 3) errors.push('Please enter your full name as it should appear on your certificate.'); }
-  let org = String(b.organisation || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 160);
+  let org = r.cert_issued_at ? r.organisation : String(b.organisation || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 160);
   const country = String(b.country || '').trim().slice(0, 60);
   if (!inst.countrySet.has(country)) errors.push('Please choose your country from the list.');
   { const hit = inst.lookup(org, country); if (hit) org = hit.name; else if (org.length < 3) errors.push('Please enter your institution or organisation.'); }
@@ -518,7 +547,8 @@ router.post('/account/password', requireReg, async (req, res) => {
   const pw = String(b.password || ''); const pe = pw !== String(b.password2 || '') ? 'The two new passwords do not match.' : speakers.checkPassword(pw, r); if (pe) errs.push(pe);
   if (errs.length) { flash(req, '', errs); return res.redirect(cfg.base + '/account#password'); }
   db.prepare('UPDATE registrations SET pw_hash=?, pw_set_at=? WHERE id=?').run(await bcrypt.hash(pw, 11), new Date().toISOString(), r.id);
-  flash(req, 'Your password has been changed.'); res.redirect(cfg.base + '/account#password');
+  setPP(req, db.prepare('SELECT id,pw_set_at FROM registrations WHERE id=?').get(r.id));
+  flash(req, 'Your password has been changed. Other devices have been signed out.'); res.redirect(cfg.base + '/account#password');
 });
 // certificate: drawn in the browser (same design as the organisers' batch page); the server only says whether it is available
 router.post('/account/certificate', requireReg, (req, res) => {
@@ -567,12 +597,12 @@ router.get('/speakers/:slug', (req, res, next) => {
 });
 
 // ── speakers: portal — invitation (accept/decline) → password; the emailed code is only for a forgotten password ──
-const currentSpeaker = (req) => (req.session.spk ? speakers.byId(req.session.spk) : null);
+const currentSpeaker = (req) => { const s = req.session.spk ? speakers.byId(req.session.spk) : null; return s && (req.session.sv || '') === (s.pw_set_at || '') ? s : null; };
 const requireSpeaker = (req, res, next) => { const s = currentSpeaker(req); if (!s) { req.session.spk = null; return res.redirect(cfg.base + '/speaker/login'); } req.spk = s; next(); };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const spkSignIn = (req, res, s, welcome) => {
   db.prepare('UPDATE speakers SET last_login=? WHERE id=?').run(new Date().toISOString(), s.id);
-  req.session = { spk: s.id, csrf: crypto.randomBytes(24).toString('hex') };       // fresh session on sign-in
+  req.session = { spk: s.id, sv: s.pw_set_at || '', csrf: crypto.randomBytes(24).toString('hex') };       // fresh session on sign-in
   if (welcome) flash(req, welcome);
   res.redirect(cfg.base + '/speaker');
 };
@@ -607,8 +637,8 @@ router.post('/speaker/forgot', async (req, res) => {
     const code = genCode();
     db.prepare('INSERT INTO speaker_codes (email_key,code_hash,expires_at,attempts,sends,last_sent) VALUES (?,?,?,0,1,?) ON CONFLICT(email_key) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, attempts=0, sends=sends+1, last_sent=excluded.last_sent')
       .run(key, codeHash('spk:' + key, code), t + cfg.codeMinutes * 60, t);
-    try { const m = mail.speakerCodeEmail({ name: s.full_name, code }); await mail.send({ to: s.email, subject: m.subject, text: m.text, html: m.html }); }
-    catch (ex) { console.error('Speaker reset email failed:', ex.message); return again('We could not send the email just now. Please try again shortly, or contact ' + cfg.smtp.replyTo + '.', 500); }
+    try { const m = mail.speakerCodeEmail({ name: s.full_name, code }); mail.send({ to: s.email, subject: m.subject, text: m.text, html: m.html }).catch((ex) => console.error('Speaker reset email failed:', ex.message)); }   // not awaited: same response time for every address
+    catch (ex) { console.error('Speaker reset email failed:', ex.message); }
   }
   req.session.spl = { key, masked: maskEmail(email), t };
   res.redirect(cfg.base + '/speaker/verify');
@@ -681,7 +711,8 @@ router.get('/speaker/calendar.ics', requireSpeaker, (req, res) => {
 router.post('/speaker', requireSpeaker, (req, res) => {
   if (!csrfOk(req)) { flash(req, '', 'Your session expired; your changes were not saved. Please try again.'); return res.redirect(cfg.base + '/speaker'); }
   const { v, errors } = speakers.validate(req.body || {});
-  if (errors.length) return html(res, spv.portal({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: errors } }), 400);
+  if (String(req.body.ver || '') !== speakers.verOf(req.spk)) errors.push(`Your page was changed${req.spk.updated_by === 'organiser' ? ' by the organisers' : ''} at ${String(req.spk.updated_at || '').slice(11, 16)} UTC, after you opened this form. Check what you wrote below, then press Save again to keep your version, or reload the page to see theirs.`);
+  if (errors.length) return html(res, spv.portal({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: errors }, ver: speakers.verOf(req.spk) }), 400);
   speakers.save(req.spk.id, v, 'speaker');
   flash(req, 'Saved. Your page on the website is up to date.');
   res.redirect(cfg.base + '/speaker');
@@ -717,11 +748,13 @@ router.get('/admin/speakers/:id', requireAdmin, admSpeaker, (req, res) => html(r
 router.post('/admin/speakers/:id', requireAdmin, admSpeaker, async (req, res) => {
   if (!csrfOk(req)) return res.status(400).send('Bad request');
   const { v, errors } = speakers.validate(req.body || {}, { admin: true });
+  const stale = String(req.body.ver || '') !== speakers.verOf(req.spk);
+  if (stale) errors.push(`This profile was changed${req.spk.updated_by === 'speaker' ? ' by the speaker' : ''} at ${String(req.spk.updated_at || '').slice(11, 16)} UTC, after you opened it. Check your edits below, then press Save again to overwrite, or reload to see their version.`);
   const other = v.email_key && speakers.byEmailKey(v.email_key);
   if (other && other.id !== req.spk.id) errors.push('Another speaker already uses that email address.');
-  if (errors.length) return html(res, spv.adminEdit({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: errors }, topbar: admBar(req, 'Speakers') }), 400);
+  if (errors.length) return html(res, spv.adminEdit({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: errors }, topbar: admBar(req, 'Speakers'), ver: speakers.verOf(req.spk) }), 400);
   const changed = speakers.slotKey(v) !== speakers.slotKey(req.spk);
-  if (changed && req.body.sched_ok !== '1') return html(res, spv.adminEdit({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: ['Please confirm the new talk date and time before saving.'] }, topbar: admBar(req, 'Speakers') }), 400);
+  if (changed && req.body.sched_ok !== '1') return html(res, spv.adminEdit({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: ['Please confirm the new talk date and time before saving.'] }, topbar: admBar(req, 'Speakers'), ver: speakers.verOf(req.spk) }), 400);
   speakers.save(req.spk.id, v, 'organiser');
   let note = '';
   if (changed && req.body.notify === '1' && speakers.hasSlot(v)) {
@@ -763,27 +796,32 @@ router.post('/admin/speakers/:id/delete', requireAdmin, admSpeaker, (req, res) =
 router.get('/privacy', (req, res) => html(res, views.legal('privacy')));
 router.get('/terms', (req, res) => html(res, views.legal('terms')));
 
+const vHits = new Map();                                              // ip -> [window start, count]; certificate look-ups are limited so references cannot be scanned for names
+setInterval(() => { const t = Date.now(); for (const [k, v] of vHits) if (t - v[0] > 600000) vHits.delete(k); }, 60000).unref();
 router.get('/verify', (req, res) => {
+  { const k = ipHash(req), t = Date.now(), v = vHits.get(k);
+    if (!v || t - v[0] > 600000) vHits.set(k, [t, 1]); else if (++v[1] > 40) return html(res, views.verify('', null, true), 429); }
   const ref = String(req.query.c || '').toUpperCase().trim();
   const row = /^IC27-[A-Z0-9]{5}$/.test(ref) ? db.prepare('SELECT full_name, organisation, cert_issued_at FROM registrations WHERE ref=?').get(ref) : null;
   html(res, views.verify(ref, row));
 });
 
 // ── admin ─────────────────────────────────────────────────
-router.get('/admin/login', (req, res) => (req.session.admin ? res.redirect(cfg.base + '/admin') : html(res, adminViews.login({ csrf: csrfToken(req) }))));
+router.get('/admin/login', (req, res) => (req.session.admin && req.session.av === adminTag() && !adminDefault() ? res.redirect(cfg.base + '/admin') : html(res, adminViews.login({ csrf: csrfToken(req) }))));
 router.post('/admin/login', (req, res) => {
   const h = ipHash(req);
   db.prepare('DELETE FROM login_attempts WHERE ts < ?').run(Math.floor(Date.now() / 1000) - 900);
   const fails = db.prepare('SELECT COUNT(*) c FROM login_attempts WHERE ip_hash=?').get(h).c;
   let err = '';
-  if (fails >= 6) err = 'Too many attempts. Please wait 15 minutes.';
+  if (adminDefault()) err = 'Organiser sign-in is switched off until a private admin password is set (ADMIN_HASH on the server). See the README.';
+  else if (fails >= 6) err = 'Too many attempts. Please wait 15 minutes.';
   else if (!csrfOk(req)) err = 'Session expired. Please try again.';
   else {
     const okU = safeEq(hmac(String(req.body.user || '')), hmac(cfg.adminUser));
     const okP = bcrypt.compareSync(String(req.body.pass || ''), cfg.adminHash);
     if (okU && okP) {
       db.prepare('DELETE FROM login_attempts WHERE ip_hash=?').run(h);
-      req.session = { admin: true, csrf: crypto.randomBytes(24).toString('hex') };       // fresh session on login
+      req.session = { admin: true, av: adminTag(), csrf: crypto.randomBytes(24).toString('hex') };       // fresh session on login
       return res.redirect(cfg.base + '/admin');
     }
     db.prepare('INSERT INTO login_attempts (ip_hash, ts) VALUES (?,?)').run(h, Math.floor(Date.now() / 1000));
@@ -870,6 +908,7 @@ router.post('/admin/action', requireAdmin, (req, res) => {
   else if (act === 'waived') { run({ pre: "UPDATE registrations SET pay_status='waived', paid_at=NULL, pay_source='manual', pay_note=COALESCE(pay_note,'waived by organiser')" }, []); flash(req, 'Marked as not requiring payment.'); }
   else if (act === 'attended') run({ pre: 'UPDATE registrations SET attended=1' }, []);
   else if (act === 'unattended') run({ pre: 'UPDATE registrations SET attended=0' }, []);
+  else if (act === 'revoke') { run({ pre: 'UPDATE registrations SET cert_issued_at=NULL' }, []); flash(req, 'Certificates withdrawn: they no longer verify, and participants can download again if they are still eligible.'); }
   else if (act === 'delete') {
     if (req.body.scope === 'all' && String(req.body.confirm || '') !== 'DELETE') return res.redirect(back);
     run({ pre: 'DELETE FROM registrations' }, []);
@@ -1004,6 +1043,7 @@ router.post('/admin/settings/password', requireAdmin, (req, res) => {
   if (errs.length) { flash(req, '', errs); return res.redirect(cfg.base + '/admin/settings#account'); }
   if (np) settings.setRaw('adminHash', bcrypt.hashSync(np, 12));
   if (nu) settings.setRaw('adminUser', nu);
+  req.session.av = adminTag();                                       // keep this session; every other one is signed out
   flash(req, 'Admin login updated. Use the new details next time you sign in.');
   res.redirect(cfg.base + '/admin/settings#account');
 });
@@ -1065,10 +1105,9 @@ router.get('/admin/mail-test', requireAdmin, async (req, res) => {
     const r = await mail.diagnose();
     body += '<table border="1" cellpadding="8" style="border-collapse:collapse"><tr><th>Host</th><th>Port</th><th>Result</th></tr>' +
       r.map((x) => `<tr><td>${esc(x.host)}</td><td>${x.port}</td><td style="color:${x.ok ? 'green' : 'crimson'}">${x.ok ? 'OK (' + x.ms + ' ms)' : esc(`${x.code} ${x.resp} ${x.msg}`)}</td></tr>`).join('') + '</table>';
-    if (req.query.to) {
-      try { const r = await mail.send({ to: String(req.query.to), subject: `${cfg.eventName} test email`, text: 'SMTP is working.' }); body += `<p style="color:green">Zoho accepted the message for ${esc(req.query.to)}.<br>Accepted: ${esc(JSON.stringify(r.accepted))} · Rejected: ${esc(JSON.stringify(r.rejected))}<br>Server reply: ${esc(r.response)}</p>`; }
-      catch (ex) { body += `<p style="color:crimson">Send failed: ${esc(ex.message)}</p>`; }
-    } else body += '<p>Send a test: add <code>?to=you@example.com</code> to this URL.</p>';
+    {
+      body += '<p>To send a test email, use Admin → Settings → Tools (a link cannot send mail on its own).</p>';
+    }
   }
   res.set('Cache-Control', 'no-store').type('html').send(`<!doctype html><meta name="robots" content="noindex"><body style="font-family:sans-serif;padding:24px"><h2>Email diagnostics</h2>${body}<p><a href="${cfg.base}/admin">← Back</a></p>`);
 });
