@@ -21,14 +21,14 @@
   }
 
   // ── atom tints, computed once ──
-  // two colours from the logo, navy #16295E and gold #F2A900, as solid tints over paper #FBFAF7 (index 0..TN-1 navy, TN..2TN-1 gold)
+  // one colour, navy #16295E, as solid tints over paper #FBFAF7 (the second set is unused)
   var TN = 7, TB = [], TINT = [];
   function mix(c, m) { return 'rgb(' + Math.round(251 + (c[0] - 251) * m) + ',' + Math.round(250 + (c[1] - 250) * m) + ',' + Math.round(247 + (c[2] - 247) * m) + ')'; }
-  [[22, 41, 94], [242, 169, 0]].forEach(function (c) {
+  [[22, 41, 94], [22, 41, 94]].forEach(function (c) {
     for (var k0 = 0; k0 < TN; k0++) { TB.push([]); TINT.push(mix(c, 0.14 + 0.86 * Math.pow((k0 + 1) / TN, 1.2))); }
   });
 
-  // ── the crystal (rock-salt arrangement: gold and navy alternate on a cubic grid) ──
+  // ── the crystal (simple cubic grid, one colour) ──
   var small = innerWidth < 760, NX = small ? 7 : 11, NY = small ? 6 : 8, NZ = small ? 6 : 8;
   var A = [], B = [], idx = {};
   (function () {
@@ -43,7 +43,7 @@
 
   var W = 0, H = 0, dpr = 1, F = 600, raf = 0, on = true, t0 = performance.now();
   var mx = 0, my = 0, tx = 0, ty = 0, px = -1e4, py = -1e4, p = 0, pin = false, runway = 1, y0 = 0, hh = 69;
-  var ema = 8, lite = 0, lastDraw = 0, lp = '', lx = '', ly = '', lsx = '', lsy = '', lastT = 0, vis = [], band = [[], [], []];
+  var fdt = 16.7, lastDraw = 0, lp = '', lx = '', ly = '', lsx = '', lsy = '', lastT = 0, vis = [], band = [[], [], []];
   var P = new Array(A.length);
   for (var n0 = 0; n0 < A.length; n0++) P[n0] = { x: 0, y: 0, f: 0, z: 0, r: 0, a: 0, g: A[n0].g, i: n0 };
 
@@ -51,10 +51,10 @@
   function clamp(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
   function smooth(a, b, v) { var t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); }
 
-  var stack = false, textTop = 0, scx = 0, scy = 0, sw = 0, sh = 0;
+  var lite = 0, lowres = false, stack = false, textTop = 0, scx = 0, scy = 0, sw = 0, sh = 0;
   function measure() {
     var r = stick.getBoundingClientRect();
-    dpr = Math.min(innerWidth < 760 ? 1.25 : 1, window.devicePixelRatio || 1); W = r.width; H = r.height;
+    dpr = Math.min(lowres ? 1 : innerWidth < 760 ? 2 : 1.75, window.devicePixelRatio || 1); W = r.width; H = r.height;   // sharp on high-density screens; drops to 1 if the device struggles
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     F = Math.min(W * (W < 760 ? 1.15 : 0.62), H * 1.25);
@@ -81,8 +81,8 @@
     // once settled and nothing is moving, 30 fps is plenty; never spend more than needed
     var calm = now - t0 > 3200 && Math.abs(progress() - p) < 0.0008 && px < -9e3;
     if (!still && (calm || lite > 1) && now - lastT < (lite > 1 ? 40 : 30)) { raf = requestAnimationFrame(frame); return; }
-    var fs = performance.now();
-    lastT = now;
+    var gap = lastT ? now - lastT : 16.7; lastT = now;
+    fdt += (Math.min(gap, 120) - fdt) * 0.1;
     var t = still ? 99 : (now - t0) / 1000;
     p += (progress() - p) * (still ? 1 : 0.14);                    // eased, so the camera never jerks
     mx += (tx - mx) * 0.06; my += (ty - my) * 0.06;
@@ -129,7 +129,7 @@
     for (i = 0; i < vis.length; i++) {
       q = vis[i]; var tone = q.a * (0.5 + 0.5 * smooth(2, 12, 24 - q.z));
       if (q.x < -q.r || q.x > W + q.r || q.y < -q.r || q.y > H + q.r) continue;
-      TB[(q.g ? TN : 0) + Math.min(TN - 1, Math.floor(tone * TN))].push(q);
+      TB[Math.min(TN - 1, Math.floor(tone * TN))].push(q);
     }
     for (k = 0; k < 2 * TN; k++) {                                    // faint to strong, navy and gold interleaved
       var kk = (k >> 1) + (k & 1) * TN, bk = TB[kk]; if (!bk.length) continue;
@@ -138,8 +138,9 @@
       g.fill();
     }
     // quality governor: if this device spends too long drawing, shed detail (the intro itself stays as designed)
-    ema += (performance.now() - fs - ema) * 0.08;
-    if (!still && now - t0 > 2600) { if (ema > 9 && lite < 2) { lite++; ema = 5; } }
+    var slow = fdt > (calm ? 45 : 24);                                // judged by real frame gaps, so drawing cost on the GPU counts too
+    if (!still && !lowres && dpr > 1 && slow && now - t0 > 500) { lowres = true; fdt = 16.7; measure(); }   // sharpness goes first, at any moment
+    else if (!still && now - t0 > 2600 && slow && lite < 2) { lite++; fdt = 16.7; }
     if (!still) raf = requestAnimationFrame(frame);
   }
   document.addEventListener('visibilitychange', function () { if (!document.hidden) kick(); });
