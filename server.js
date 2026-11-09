@@ -551,14 +551,55 @@ router.post('/account/profile', requireReg, (req, res) => {
   flash(req, 'Your profile has been saved.');
   res.redirect(cfg.base + '/account#profile');
 });
+// ── submissions: abstract (typed), extended abstract and full paper (uploaded) ──
+const SUB = require('./lib/submit'), AUTH = require('./lib/authors');
+let APDF; const apdf = () => (APDF ||= require('./lib/abstract-pdf'));          // loaded on first use (MathJax is large)
+const mathCheck = (...t) => { try { return apdf().mathErrors(...t); } catch (err) { console.warn('math check failed:', err.message); return []; } };
+const pdfMeta = () => ({ headLeft: `${cfg.eventName} · ${cfg.eventFull}`, headRight: `${cfg.eventDateText}, ${cfg.eventVenue}` });
+const absOfReg = (r) => ({ kind: /oral/i.test(r.participation || '') ? 'Oral presentation' : /poster/i.test(r.participation || '') ? 'Poster presentation' : '', ref: r.paper_id || r.ref, title: r.paper_title || 'Untitled', authors: AUTH.read(r, r.full_name), abstract: r.abstract || '', keywords: r.keywords || '' });
+const absOfSpeaker = (sp) => ({ kind: sp.role || 'Invited talk', ref: '', title: sp.talk_title || 'Title to be announced', authors: AUTH.read(sp, sp.full_name), abstract: sp.abstract || '', keywords: sp.keywords || '' });
+const pdfName = (a, ref) => `${cfg.eventName.replace(/\s+/g, '')}_abstract_${String(ref || '').replace(/[^\w-]+/g, '')}.pdf`;
+async function sendPdf(res, list, name, opts = {}) {
+  try {
+    const buf = await apdf().buffer(list, { ...pdfMeta(), title: list.length === 1 ? list[0].title.replace(/\$/g, '') : opts.title, author: list.length === 1 ? AUTH.line(list[0].authors) : cfg.eventName, ...opts });
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `${opts.inline === false ? 'attachment' : 'inline'}; filename="${name}"`, 'Cache-Control': 'private, no-store' }).send(buf);
+  } catch (err) { console.error('PDF failed:', err); res.status(500).type('text/plain').send('Sorry, the PDF could not be made. Please try again, or tell the organisers.'); }
+}
 router.post('/account/presentation', requireReg, (req, res) => {
   const r = req.reg, b = req.body || {};
   if (!csrfOk(req)) { flash(req, '', 'Your session expired; your changes were not saved. Please try again.'); return res.redirect(cfg.base + '/account#presentation'); }
   if (!parts.presenting(r)) { flash(req, '', 'Choose “Oral presentation” or “Poster presentation” in your profile first.'); return res.redirect(cfg.base + '/account#profile'); }
-  const { v, errors } = parts.validatePresentation(b);
-  if (errors.length) { flash(req, '', errors); req.session.prform = b; return res.redirect(cfg.base + '/account#presentation'); }
-  db.prepare('UPDATE registrations SET paper_title=?, paper_id=?, coauthors=?, abstract=?, pres_at=? WHERE id=?').run(v.paper_title, v.paper_id, v.coauthors, v.abstract, new Date().toISOString(), r.id);
-  flash(req, 'Your presentation details have been saved.'); res.redirect(cfg.base + '/account#presentation');
+  if (SUB.closed(cfg.absDeadline)) { flash(req, '', 'The abstract deadline has passed, so the abstract can no longer be changed. Please email the organisers.'); return res.redirect(cfg.base + '/account#presentation'); }
+  const { v, errors } = SUB.validateAbstract(b, { mathCheck });
+  if (errors.length) { flash(req, '', errors); req.session.prform = { paper_title: v.paper_title, abstract: v.abstract, keywords: v.keywords, authors: v.authors }; return res.redirect(cfg.base + '/account#presentation'); }
+  db.prepare("UPDATE registrations SET paper_title=?, coauthors=?, authors=?, abstract=?, keywords=?, pres_at=?, abs_status=CASE WHEN abs_status='revise' THEN '' ELSE abs_status END WHERE id=?").run(v.paper_title, v.coauthors, v.authors, v.abstract, v.keywords, new Date().toISOString(), r.id);
+  const left = SUB.absChecklist({ ...r, ...v }, r.full_name).filter((x) => !x[1]).map((x) => x[0]);
+  flash(req, left.length ? `Saved. Still needed before the abstract is complete: ${left.join(', ')}.` : 'Your abstract has been saved.'); res.redirect(cfg.base + '/account#stage-abs');
+});
+router.get('/account/abstract.pdf', requireReg, (req, res) => { const r = req.reg; if (!r.paper_title) return res.redirect(cfg.base + '/account#presentation'); sendPdf(res, [absOfReg(r)], pdfName(null, r.ref)); });
+const rawUpload = (mb) => express.raw({ type: () => true, limit: mb + 'mb' });
+const upName = (req) => { try { return decodeURIComponent(String(req.get('X-File-Name') || '')).slice(0, 200); } catch (_) { return ''; } };
+const csrfHeader = (req) => { const a = String(req.get('X-CSRF') || ''), b2 = String(req.session.csrf || ''); return a.length === b2.length && a.length > 0 && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b2)); };
+router.post('/account/upload/:stage', requireReg, rawUpload(26), (req, res) => {
+  const r = req.reg, st = SUB.stages().find((x) => x.id === req.params.stage && x.id !== 'abs');
+  if (!csrfHeader(req)) return res.status(400).json({ ok: false, error: 'Your session expired. Please reload the page.' });
+  if (!st) return res.status(404).json({ ok: false, error: 'This submission is not open.' });
+  if (!parts.presenting(r)) return res.status(403).json({ ok: false, error: 'Only oral and poster presenters submit papers.' });
+  if (st.closed) return res.status(403).json({ ok: false, error: 'The deadline has passed.' });
+  const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+  if (!buf.length) return res.status(400).json({ ok: false, error: 'The file is empty.' });
+  const out = SUB.saveFile(r.id, st.id, upName(req), buf);
+  if (out.error) return res.status(400).json({ ok: false, error: out.error });
+  const old = r[st.id + '_file'];
+  db.prepare(`UPDATE registrations SET ${st.id}_file=?, ${st.id}_name=?, ${st.id}_at=?, ${st.id}_status=CASE WHEN ${st.id}_status='revise' THEN '' ELSE ${st.id}_status END WHERE id=?`).run(out.file, out.name, new Date().toISOString(), r.id);
+  if (old && old !== out.file) SUB.removeFile(old);
+  res.json({ ok: true });
+});
+const sendStored = (res, file, name) => { const p2 = SUB.filePath(file); if (!p2 || !require('fs').existsSync(p2)) return res.status(404).type('text/plain').send('File not found.'); res.set('Cache-Control', 'private, no-store'); res.download(p2, name || path.basename(p2)); };
+router.get('/account/file/:stage', requireReg, (req, res) => { const k = req.params.stage; if (!['ext', 'fp'].includes(k)) return res.status(404).end(); sendStored(res, req.reg[k + '_file'], req.reg[k + '_name']); });
+router.get('/submissions/template/:stage', (req, res) => {
+  const t = SUB.template(req.params.stage); if (!t) return res.status(404).type('text/plain').send('The template is not available yet.');
+  res.set('Cache-Control', 'public, max-age=300'); res.download(SUB.templatePath(t), t.name);
 });
 router.post('/account/password', requireReg, async (req, res) => {
   const r = req.reg, b = req.body || {};
@@ -732,7 +773,7 @@ router.get('/speaker/calendar.ics', requireSpeaker, (req, res) => {
 });
 router.post('/speaker', requireSpeaker, (req, res) => {
   if (!csrfOk(req)) { flash(req, '', 'Your session expired; your changes were not saved. Please try again.'); return res.redirect(cfg.base + '/speaker'); }
-  const { v, errors } = speakers.validate(req.body || {});
+  const { v, errors } = speakers.validate({ ...(req.body || {}), mathCheck });
   if (String(req.body.ver || '') !== speakers.verOf(req.spk)) errors.push(`Your page was changed${req.spk.updated_by === 'organiser' ? ' by the organisers' : ''} at ${String(req.spk.updated_at || '').slice(11, 16)} UTC, after you opened this form. Check what you wrote below, then press Save again to keep your version, or reload the page to see theirs.`);
   if (errors.length) return html(res, spv.portal({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: errors }, ver: speakers.verOf(req.spk) }), 400);
   speakers.save(req.spk.id, v, 'speaker');
@@ -746,6 +787,7 @@ const photoRoute = (getId) => [express.json({ limit: '4mb' }), (req, res) => {
   const err = speakers.savePhoto(id, req.body && req.body.dataUrl);
   res.json(err ? { ok: false, error: err } : { ok: true, url: speakers.photoUrl(speakers.byId(id)), pct: speakers.completeness(speakers.byId(id)) });
 }];
+router.get('/speaker/abstract.pdf', (req, res) => { const sp = currentSpeaker(req); if (!sp) return res.redirect(cfg.base + '/speaker/login'); sendPdf(res, [absOfSpeaker(sp)], pdfName(null, sp.slug)); });
 router.post('/speaker/photo', ...photoRoute((req) => (currentSpeaker(req) ? req.session.spk : 0)));
 
 // ── speakers: admin ───────────────────────────────────────
@@ -769,7 +811,7 @@ const admSpeaker = (req, res, next) => { const s = speakers.byId(parseInt(req.pa
 router.get('/admin/speakers/:id', requireAdmin, admSpeaker, (req, res) => html(res, spv.adminEdit({ s: req.spk, csrf: csrfToken(req), flash: takeFlash(req), topbar: admBar(req, 'Speakers') })));
 router.post('/admin/speakers/:id', requireAdmin, admSpeaker, async (req, res) => {
   if (!csrfOk(req)) return res.status(400).send('Bad request');
-  const { v, errors } = speakers.validate(req.body || {}, { admin: true });
+  const { v, errors } = speakers.validate({ ...(req.body || {}), mathCheck }, { admin: true });
   const stale = String(req.body.ver || '') !== speakers.verOf(req.spk);
   if (stale) errors.push(`This profile was changed${req.spk.updated_by === 'speaker' ? ' by the speaker' : ''} at ${String(req.spk.updated_at || '').slice(11, 16)} UTC, after you opened it. Check your edits below, then press Save again to overwrite, or reload to see their version.`);
   const other = v.email_key && speakers.byEmailKey(v.email_key);
@@ -903,10 +945,51 @@ router.get('/admin', requireAdmin, (req, res) => {
   const total = where ? db.prepare(`SELECT COUNT(*) c FROM registrations ${where}`).get(...p).c : stats.total;
   const pages = Math.max(1, Math.ceil(total / f.per));
   const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
-  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,department,participation,paper_title,abstract IS NOT NULL AND abstract<>'' abstract,coauthors,pres_at,mass_no,diet,diet_note,dinner,billing,pay_source,pay_note,last_login,profile_at,pw_hash IS NOT NULL has_pw FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
+  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,department,participation,paper_title,abstract IS NOT NULL AND abstract<>'' abstract,coauthors,authors,keywords,ext_file,ext_name,ext_at,fp_file,fp_name,fp_at,abs_status,ext_status,fp_status,review_note,pres_at,mass_no,diet,diet_note,dinner,billing,pay_source,pay_note,last_login,profile_at,pw_hash IS NOT NULL has_pw,authors,keywords,abs_status,ext_name,ext_file,ext_status,fp_name,fp_file,fp_status FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
   html(res, adminViews.dashboard({ rows, stats, total, page, pages, f, cats: CATS, statuses: STATUSES, pays: PAYS, pers: PERS, qs: filterQS(f), csrf: csrfToken(req), flash: takeFlash(req) }));
 });
 
+// ── submissions (organisers) ──
+router.post('/admin/templates/:stage', requireAdmin, rawUpload(26), (req, res) => {
+  if (!csrfHeader(req)) return res.status(400).json({ ok: false, error: 'Your session expired. Reload the page.' });
+  const out = SUB.saveTemplate(req.params.stage, upName(req), Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+  if (out.error) return res.status(400).json({ ok: false, error: out.error });
+  res.json({ ok: true });
+});
+router.post('/admin/templates/:stage/delete', requireAdmin, (req, res) => { if (csrfOk(req)) { SUB.removeTemplate(req.params.stage); flash(req, 'The template was removed.'); } res.redirect(cfg.base + '/admin/settings#subs'); });
+const regById = (id) => db.prepare('SELECT * FROM registrations WHERE id=?').get(parseInt(id, 10) || 0);
+router.get('/admin/participant/:id/abstract.pdf', requireAdmin, (req, res) => { const r = regById(req.params.id); if (!r || !r.paper_title) return res.status(404).type('text/plain').send('No abstract yet.'); sendPdf(res, [absOfReg(r)], pdfName(null, r.ref)); });
+router.get('/admin/participant/:id/file/:stage', requireAdmin, (req, res) => { const r = regById(req.params.id), k = req.params.stage; if (!r || !['ext', 'fp'].includes(k)) return res.status(404).end(); sendStored(res, r[k + '_file'], `${r.ref}_${k === 'ext' ? 'extended-abstract' : 'full-paper'}_${r[k + '_name'] || ''}`); });
+router.post('/admin/review', requireAdmin, (req, res) => {
+  const b = req.body || {}, r = regById(b.id), k = String(b.stage || '');
+  if (!csrfOk(req) || !r) return res.status(400).json({ ok: false });
+  const t = new Date().toISOString();
+  if (['abs', 'ext', 'fp'].includes(k)) {
+    const status = ['', 'accepted', 'revise', 'rejected'].includes(b.status) ? b.status : '';
+    db.prepare(`UPDATE registrations SET ${k}_status=?, review_at=? WHERE id=?`).run(status, t, r.id);
+  }
+  if (b.note !== undefined) db.prepare('UPDATE registrations SET review_note=?, review_at=? WHERE id=?').run(String(b.note || '').replace(/\r/g, '').trim().slice(0, 1500), t, r.id);
+  res.json({ ok: true });
+});
+// abstract book: every presenter with a title (and invited speakers with a talk), as one PDF or as LaTeX source
+function bookList(q) {
+  const which = String(q.which || 'all'), st = String(q.status || '');
+  const regs = which === 'speakers' ? [] : db.prepare(`SELECT * FROM registrations WHERE paper_title IS NOT NULL AND paper_title<>'' AND abstract IS NOT NULL AND abstract<>''
+      ${which === 'oral' ? "AND participation LIKE 'Oral%'" : which === 'poster' ? "AND participation LIKE 'Poster%'" : "AND participation LIKE '%presentation%'"} ${st === 'accepted' ? "AND abs_status='accepted'" : st === 'notrejected' ? "AND COALESCE(abs_status,'')<>'rejected'" : ''}
+      ORDER BY participation, paper_title COLLATE NOCASE LIMIT 5000`).all();
+  const sp = which === 'all' || which === 'speakers' ? speakers.published().filter((x) => x.talk_title && x.abstract) : [];
+  return [...sp.map(absOfSpeaker), ...regs.map(absOfReg)];
+}
+router.get('/admin/abstracts.pdf', requireAdmin, (req, res) => {
+  const list = bookList(req.query); if (!list.length) return res.status(404).type('text/plain').send('No abstracts match.');
+  sendPdf(res, list, `${cfg.eventName.replace(/\s+/g, '')}_book-of-abstracts.pdf`, { title: 'Book of Abstracts', inline: false, cover: { title: 'Book of Abstracts', sub: `${cfg.eventFull}\n${cfg.eventSub}`, foot: `${cfg.eventDateText} · ${cfg.eventVenue}\n${list.length} abstracts` } });
+});
+router.get('/admin/abstracts.tex', requireAdmin, (req, res) => {
+  const list = bookList(req.query);
+  res.set({ 'Content-Type': 'application/x-tex; charset=utf-8', 'Content-Disposition': `attachment; filename="${cfg.eventName.replace(/\s+/g, '')}_book-of-abstracts.tex"` })
+    .send(apdf().tex(list, { title: 'Book of Abstracts', headLeft: cfg.eventName, cover: { title: 'Book of Abstracts', sub: cfg.eventFull, foot: `${cfg.eventDateText} · ${cfg.eventVenue}` } }));
+});
+router.get('/admin/speakers/:id/abstract.pdf', requireAdmin, (req, res) => { const sp = speakers.byId(parseInt(req.params.id, 10)); if (!sp) return res.status(404).end(); sendPdf(res, [absOfSpeaker(sp)], pdfName(null, sp.slug)); });
 router.get('/admin/participant/:id/abstract', requireAdmin, (req, res) => {    // loaded when a participant card is opened (keeps the list light)
   const r = db.prepare('SELECT abstract FROM registrations WHERE id=?').get(parseInt(req.params.id, 10) || 0);
   if (!r) return res.status(404).end();
@@ -1016,6 +1099,15 @@ function matchImport(text) {
   }
   return out;
 }
+router.get('/admin/submissions', requireAdmin, (req, res) => {
+  const P = "participation LIKE '%presentation%'";
+  const q = (sql) => db.prepare(sql).get();
+  const stats = { presenters: q(`SELECT COUNT(*) n FROM registrations WHERE ${P}`).n };
+  for (const [k, done] of [['abs', "paper_title IS NOT NULL AND paper_title<>'' AND abstract IS NOT NULL AND abstract<>''"], ['ext', 'ext_file IS NOT NULL'], ['fp', 'fp_file IS NOT NULL']])
+    stats[k] = q(`SELECT COALESCE(SUM(${done}),0) done, COALESCE(SUM(${k}_status='accepted'),0) accepted, COALESCE(SUM(${k}_status='revise'),0) revise, COALESCE(SUM(${k}_status='rejected'),0) rejected FROM registrations WHERE ${P}`);
+  const recent = db.prepare(`SELECT id,ref,full_name,participation,paper_title,pres_at,ext_file,fp_file,abs_status FROM registrations WHERE ${P} AND paper_title IS NOT NULL AND paper_title<>'' ORDER BY COALESCE(pres_at,'') DESC LIMIT 30`).all();
+  html(res, adminViews.submissions({ csrf: csrfToken(req), stats, stages: SUB.stages(), recent, speakersWithAbs: speakers.published().filter((x) => x.talk_title && x.abstract).length }));
+});
 router.get('/admin/payments', requireAdmin, (req, res) => html(res, adminViews.payments({ counts: db.prepare("SELECT COALESCE(SUM(pay_status='paid'),0) paid, COALESCE(SUM(pay_status='waived'),0) waived, COALESCE(SUM(pay_status='claimed'),0) claimed, COALESCE(SUM(pay_status='unpaid'),0) unpaid FROM registrations").get(), csrf: csrfToken(req), flash: takeFlash(req), t2u: cfg.ticket2uUrl, fees: cfg.fees, st: { on: stripe.configured(), mode: stripe.mode(), hook: !!cfg.stripe.webhookSecret, url: views.SITE + '/stripe/webhook', provider: cfg.payProvider, bad: cfg.fees.filter((f) => !stripe.parseFee(f.fee)).map((f) => f.name) }, paidBy: db.prepare("SELECT pay_source s, COUNT(*) n FROM registrations WHERE pay_status='paid' GROUP BY pay_source").all(), claimed: db.prepare("SELECT id,ref,full_name,email,category,fee,pay_ref,pay_claimed_at FROM registrations WHERE pay_status='claimed' ORDER BY pay_claimed_at LIMIT 500").all() })));
 router.post('/admin/payments/import', express.json({ limit: '8mb' }), requireAdmin, (req, res) => {
   if (!csrfOk(req)) return res.status(400).json({ ok: false, error: 'Session expired. Reload the page.' });
@@ -1143,13 +1235,13 @@ router.get('/admin/export.csv', requireAdmin, (req, res) => {
   const { where, p } = adminFilter(req.query);
   const cell = (x) => { let s = String(x ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };   // CSV-injection safe
   res.type('text/csv; charset=utf-8').set('Content-Disposition', `attachment; filename="participants-${new Date().toISOString().slice(0, 10)}.csv"`);
-  res.write('﻿' + ['Reference', 'Title', 'Full name', 'Email', 'Phone', 'Position', 'Department', 'Organisation', 'Participation', 'Paper title', 'Paper ID', 'Authors', 'Abstract', 'MASS no.', 'Diet', 'Diet note', 'Dinner', 'Invoice to', 'Category', 'Fee', 'Payment status', 'Ticket2U order', 'Amount paid', 'Paid at (UTC)', 'Country', 'Registered (UTC)', 'Attended', 'Certificate issued', 'Sign-up method'].map(cell).join(',') + '\r\n');
+  res.write('﻿' + ['Reference', 'Title', 'Full name', 'Email', 'Phone', 'Position', 'Department', 'Organisation', 'Participation', 'Paper title', 'Paper ID', 'Authors', 'Abstract', 'Keywords', 'Abstract review', 'Extended abstract file', 'Extended abstract review', 'Full paper file', 'Full paper review', 'MASS no.', 'Diet', 'Diet note', 'Dinner', 'Invoice to', 'Category', 'Fee', 'Payment status', 'Ticket2U order', 'Amount paid', 'Paid at (UTC)', 'Country', 'Registered (UTC)', 'Attended', 'Certificate issued', 'Sign-up method'].map(cell).join(',') + '\r\n');
   let after = 0;                                                    // stream in chunks so 100k rows never sit in memory at once
   for (;;) {
     const w2 = where ? where + ' AND id > ?' : 'WHERE id > ?';
     const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,salutation,designation,department,participation,paper_title,paper_id,coauthors,abstract,mass_no,diet,diet_note,dinner,billing FROM registrations ${w2} ORDER BY id LIMIT 5000`).all(...p, after);
     if (!rows.length) break;
-    res.write(rows.map((r) => [r.ref, r.salutation, r.full_name, r.email, r.phone, r.designation, r.department, r.organisation, r.participation, r.paper_title, r.paper_id, r.coauthors, r.abstract, r.mass_no, r.diet, r.diet_note, r.dinner, r.billing, r.category, r.fee, r.pay_status, r.pay_ref, r.pay_amount, r.paid_at, r.country, r.created_at, r.attended ? 'Yes' : 'No', r.cert_issued_at, r.method || 'email'].map(cell).join(',')).join('\r\n') + '\r\n');
+    res.write(rows.map((r) => [r.ref, r.salutation, r.full_name, r.email, r.phone, r.designation, r.department, r.organisation, r.participation, r.paper_title, r.paper_id, AUTH.plain(AUTH.read(r, r.full_name)) || r.coauthors, r.abstract, r.keywords, SUB.STATUS[r.abs_status || ''], r.ext_name || '', r.ext_file ? SUB.STATUS[r.ext_status || ''] : '', r.fp_name || '', r.fp_file ? SUB.STATUS[r.fp_status || ''] : '', r.mass_no, r.diet, r.diet_note, r.dinner, r.billing, r.category, r.fee, r.pay_status, r.pay_ref, r.pay_amount, r.paid_at, r.country, r.created_at, r.attended ? 'Yes' : 'No', r.cert_issued_at, r.method || 'email'].map(cell).join(',')).join('\r\n') + '\r\n');
     after = rows[rows.length - 1].id;
   }
   res.end();
@@ -1189,6 +1281,7 @@ if (cfg.googleVerifyFile && /^google[a-z0-9]+\.html$/i.test(cfg.googleVerifyFile
 }
 
 app.get((cfg.base || '') + '/assets/institutions.json', inst.serve);        // gzip-compressed list (≈90 KB)
+app.use((cfg.base || '') + '/assets/katex', express.static(path.join(path.dirname(require.resolve('katex/package.json')), 'dist'), { maxAge: '30d', index: false }));   // equation preview
 app.use(cfg.base || '/', express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 app.use(cfg.base || '/', router);
 app.use((req, res) => html(res, views.head('Not found', '', { noindex: true }) + '<main class="done"><div class="wrap"><span class="label">404</span><h1>Page not found.</h1><a class="btn" href="' + cfg.base + '/">Back home <span class="arr">→</span></a></div></main>' + views.foot(), 404));
