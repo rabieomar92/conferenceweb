@@ -48,7 +48,9 @@ app.use(helmet({
   },
 }));
 app.use(cookieSession({ name: 'icssst', keys: [SECRET], httpOnly: true, sameSite: 'lax', secure: cfg.secureCookies, maxAge: 8 * 3600 * 1000 }));
-app.use(express.urlencoded({ extended: false, limit: '200kb' }));   // speaker abstracts/biographies can be long (and non-Latin)
+app.use(express.urlencoded({ extended: false, limit: '200kb' }));
+const i18n = require('./lib/i18n');
+app.use(i18n.middleware);                                              // Bahasa Melayu / English   // speaker abstracts/biographies can be long (and non-Latin)
 
 // ── helpers ───────────────────────────────────────────────
 const ipHash = (req) => crypto.createHmac('sha256', SECRET).update(req.ip || '0').digest('hex');
@@ -92,8 +94,10 @@ const html = (res, body, status = 200) => {
     const w = viewer(res.req), B = cfg.base;
     body = body.replace('<!--AUTHNAV-->', () => authNav(res.req))
       .replace('<!--HEROCTA-->', () => (w ? `<a class="btn" href="${w.href}">Go to my dashboard</a>` : `<a class="btn" href="${B}/register">Register now</a><a class="b2l" href="${B}/login">Already registered? Log in</a>`))
-      .replace('<!--HEROCTA2-->', () => `<a class="b2l" href="${w ? w.href : B + '/login'}">${w ? 'Go to my dashboard' : 'Log in'}</a>`);
+      .replace('<!--HEROCTA2-->', () => `<a class="b2l" href="${w ? w.href : B + '/login'}">${w ? 'Go to my dashboard' : 'Log in'}</a>`)
+      .replaceAll('<!--LANG-->', () => i18n.switcher(res.req));
   }
+  if (!/\/admin(\/|$)/.test(res.req.path)) body = i18n.translate(body.replace('</head>', () => i18n.clientDict() + '</head>'));
   return res.status(status).type('html').set('Cache-Control', 'no-store').send(body);
 };
 
@@ -118,8 +122,11 @@ router.get('/register', (req, res) => {
   if (req.query.done !== undefined) return res.redirect(cfg.base + '/account');
   const g = googleUser(req);
   if (g) {                                                                             // this Google account already registered → open its page
-    const r = db.prepare('SELECT id FROM registrations WHERE email_key=?').get(normaliseEmail(g.email));
-    if (r) { req.session.g = null; setPP(req, r); return res.redirect(cfg.base + '/account'); }
+    const r = db.prepare('SELECT * FROM registrations WHERE email_key=?').get(normaliseEmail(g.email));
+    if (r) {                                                                           // full row, so the session tag matches a password set earlier
+      const fromLogin = !!g.login;
+      return ppSignIn(req, res, r, fromLogin ? '' : i18n.t(`This Google account (${r.email}) is already registered, so we have signed you in to your registration instead.`));
+    }
   }
   const errors = req.session.gerr ? [req.session.gerr] : []; req.session.gerr = null;
   html(res, views.register({ errors, left: seatsLeft(), cats: CATS, csrf: csrfToken(req), now: Math.floor(Date.now() / 1000), v: { country: 'Malaysia', full_name: g ? g.name : '', email: g ? g.email : '' }, google: g, googleOn: googleOn() }));
@@ -155,7 +162,7 @@ router.get('/auth/google/callback', async (req, res) => {
     const u = await ur.json();
     if (!ur.ok || !u.email) throw new Error('userinfo: ' + ur.status);
     if (!u.email_verified) return back('Your Google email address is not verified. Please use another account or register with an email code.');
-    req.session.g = { email: String(u.email).toLowerCase().slice(0, 160), name: String(u.name || '').slice(0, 120), t: nowS() };
+    req.session.g = { email: String(u.email).toLowerCase().slice(0, 160), name: String(u.name || '').slice(0, 120), t: nowS(), login: gs.next === 'account' };
     if (gs.next === 'account' && !db.prepare('SELECT 1 FROM registrations WHERE email_key=?').get(normaliseEmail(u.email))) {
       req.session.gerr = `There is no registration for ${u.email} yet. Please complete the form below to register.`;
     }

@@ -59,7 +59,7 @@
       if (key() === orig || q('sched_ok').value === '1') return;
       e.preventDefault(); last = d.activeElement;
       var n = key().split('|'), o = orig.split('|'), clear = !n[0] && !n[1] && !n[2];
-      if (!clear && (!n[0] || !n[1])) { alert('Please choose both a date and a start time, or leave the schedule empty.'); return; }
+      if (!clear && (!n[0] || !n[1])) { alert((window.T||{})['Please choose both a date and a start time, or leave the schedule empty.']||'Please choose both a date and a start time, or leave the schedule empty.'); return; }
       md.querySelector('#mdlT').textContent = clear ? 'Remove the schedule?' : (o[0] ? 'Change this talk time?' : 'Set this talk time?');
       md.querySelector('.mdl-who').textContent = sf.getAttribute('data-spk') + (clear ? ' will no longer have a date and time on the website.' : ' will be shown on the website with this schedule.');
       md.querySelector('[data-d]').textContent = clear ? '—' : (lab[n[0]] || n[0]); md.querySelector('[data-t]').textContent = clear ? '—' : span(n);
@@ -94,7 +94,7 @@
     var r = d.querySelector('.chk .ring'); if (!r || p == null) return; r.style.setProperty('--p', p); r.querySelector('b').textContent = p + '%';
     var li = d.querySelector('.chk li'); if (li) li.classList.toggle('ok', !!ph.querySelector('img'));
   }
-  function removeIt() { if (confirm('Remove the photo?')) { say('Removing…'); post({ remove: true }); } }
+  function removeIt() { if (confirm((window.T||{})['Remove the photo?']||'Remove the photo?')) { say('Removing…'); post({ remove: true }); } }
   function post(body) {
     body.csrf = csrf;
     return fetch(ep, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

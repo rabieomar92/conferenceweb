@@ -1170,3 +1170,14 @@ html:not(.tabs-on) .dform{display:block}
 /* lighter hero: no pointer light, no permanent compositing layers */
 .hero-spot{display:none!important}
 .hero .hcopy,.hero .mark,.hero-sun{will-change:auto!important}
+/* language switch */
+.n-lang{display:inline-flex;align-items:center;gap:4px;margin-left:18px;font-size:14px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-decoration:none;padding:6px 2px;border-bottom:0!important}
+.n-lang span{opacity:.55}.n-lang span.on{opacity:1;color:var(--navy)}.n-lang i{font-style:normal;opacity:.35}.n-lang:hover span{opacity:1}
+@media(max-width:860px){.top nav .n-lang{margin:14px 0 0;padding:12px 0;font-size:16px}}
+/* long Malay labels in the progress steps */
+.dsteps li{padding-right:6px}.dsteps b,.dsteps span{overflow-wrap:anywhere;hyphens:auto}
+html[lang=ms] .dsteps b{font-size:14.5px;overflow-wrap:normal}
+.top .wrap{gap:0}.top nav .n-lang{flex:none}
+.lang-m{display:none}
+@media(max-width:860px){.lang-m{display:inline-flex;margin-left:auto;margin-right:14px}.lang-m .n-lang{margin:0;font-size:15px}.top nav .n-lang{display:none}}
+@media(max-width:860px){.lang-m+.menu-btn{margin-left:0}}
