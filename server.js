@@ -429,6 +429,18 @@ function confirmStripe(s) {
   if (!id || s.payment_status !== 'paid') return 0;
   return confirmPayments([id], { source: 'stripe', order: String(s.payment_intent || s.id), amount: stripe.money(s.currency, s.amount_total) });
 }
+router.get('/account/calendar.ics', requireReg, (req, res) => {
+  const d = (iso) => iso.replace(/-/g, ''), plus = (iso) => new Date(Date.parse(iso + 'T00:00:00Z') + 864e5).toISOString().slice(0, 10).replace(/-/g, '');
+  const esc = (t) => String(t).replace(/[\;,]/g, (c) => '\\' + c).replace(/\r?\n/g, '\\n');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ICSSST 2027//Registration//EN', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT', 'UID:' + req.reg.ref + '@' + (new URL(cfg.siteUrl.startsWith('http') ? cfg.siteUrl : 'https://x').hostname),
+    'DTSTAMP:' + new Date().toISOString().replace(/[-:]|\.\d{3}/g, ''), 'DTSTART;VALUE=DATE:' + d(cfg.eventDate), 'DTEND;VALUE=DATE:' + plus(cfg.eventEndDate || cfg.eventDate),
+    'SUMMARY:' + esc(cfg.eventName + ' — ' + cfg.eventFull), 'LOCATION:' + esc([cfg.eventVenue, cfg.venueAddress].filter(Boolean).join(', ')), 'DESCRIPTION:' + esc('Registration reference ' + req.reg.ref + '. ' + cfg.siteUrl), 'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
+  res.set({ 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'attachment; filename="icssst-2027.ics"', 'Cache-Control': 'no-store' }).send(ics);
+});
+router.get('/account/receipt', requireReg, (req, res) => {
+  if (req.reg.pay_status !== 'paid' && req.reg.pay_status !== 'waived') return res.redirect(cfg.base + '/account#payment');
+  html(res, views.receipt(req.reg));
+});
 router.post('/account/pay', requireReg, async (req, res) => {
   const r = req.reg;
   if (!csrfOk(req)) { flash(req, '', 'Your session expired. Please try again.'); return res.redirect(cfg.base + '/account'); }
