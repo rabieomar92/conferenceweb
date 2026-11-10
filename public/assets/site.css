@@ -22,7 +22,7 @@ img{max-width:100%;display:block}
 .top{position:sticky;top:0;z-index:20;background:rgba(248,247,244,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--rule)}
 .top .wrap{display:flex;align-items:center;justify-content:space-between;height:68px}
 .brand{font-family:'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;font-weight:700;font-size:20px;text-decoration:none;letter-spacing:-.3px;color:var(--navy)}
-.brand i{font-style:normal;color:var(--amber)}
+.brand i{font-style:normal;color:var(--amber-lt)}
 .top nav{display:flex;align-items:center;gap:34px}
 .top nav a{font-size:15.5px;font-weight:600;text-transform:none;text-decoration:none;color:var(--muted);transition:color .2s}
 .top nav a:hover{color:var(--navy)}
@@ -292,7 +292,7 @@ a.vip:hover .ph img,.spx a:hover .ph img{filter:grayscale(0);transform:scale(1.0
 .spd-nav a span{display:block;font:700 10px 'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;text-transform:none;color:var(--amber);margin-bottom:8px}
 
 /* speaker sign-in + portal */
-.spl aside h1 em{color:var(--amber);font-style:italic;font-weight:400}
+.spl aside h1 em{color:var(--amber-lt);font-style:italic;font-weight:400}
 .okmsg{background:#EEF6EF;border-left:3px solid #2F7D45;color:#1F5130;padding:14px 18px;margin-bottom:30px;font-size:14.5px}
 .prt{padding:50px 0 120px}
 .prt-hd{margin-bottom:44px}.prt-hd h1{font-family:'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;font-size:clamp(40px,5vw,64px);letter-spacing:-.03em;color:var(--navy);line-height:1;margin:16px 0 14px}.prt-hd p{color:#46506A}.prt-hd a{color:var(--navy)}
@@ -1153,7 +1153,7 @@ html:not(.tabs-on) .dform{display:block}
   .hero .mark{display:none}
   .hero .hstage{height:min(72vw,360px)}
   .hero .hword{display:block;margin:0 0 6px;font-weight:700;font-size:clamp(30px,9vw,42px);line-height:1;letter-spacing:-.01em;color:var(--navy);font-feature-settings:"lnum"}
-  .hero .hword i{font-style:normal;color:var(--amber)}
+  .hero .hword i{font-style:normal;color:var(--amber-lt)}
 }
 /* header: logos only (the event name is in the hero) */
 .top .brand .lg,.top .brand .bl i{display:none!important}
