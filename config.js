@@ -31,7 +31,7 @@ module.exports = {
   eventDateText: '6–8 September 2027',
   eventTime: env.EVENT_TIME || 'To be confirmed',
   eventVenue: 'Penang, Malaysia',
-  seatLimit: Number(env.SEAT_LIMIT || 1000),
+  seatLimit: Number(env.SEAT_LIMIT || 0),          // 0 = no limit until the organisers set one in Admin → Settings
   regOpen: env.REG_OPEN ? env.REG_OPEN === 'true' : true,
 
   // Outgoing email (Zoho SMTP). Put the password in the host's environment variables as SMTP_PASS (do not commit it).

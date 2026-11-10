@@ -73,7 +73,7 @@ const csrfOk = (req) => {
   return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 };
 const seatsTaken = () => db.prepare('SELECT COUNT(*) c FROM registrations WHERE cancelled_at IS NULL').get().c;   // a cancelled registration frees its seat
-const seatsLeft = () => Math.max(0, cfg.seatLimit - seatsTaken());
+const seatsLeft = () => (cfg.seatLimit > 0 ? Math.max(0, cfg.seatLimit - seatsTaken()) : Infinity);   // no limit set → never full
 const DEFAULT_ADMIN_HASH = '$2b$12$yIUnLxFZjgLscFLScT/OUe7lJqmO0cqyNZoDeEYq4KNs9cPqKth4u';
 const adminTag = () => crypto.createHmac('sha256', SECRET).update(cfg.adminUser + '|' + cfg.adminHash).digest('hex').slice(0, 20);   // changes when the admin password changes: older sessions stop working
 const adminDefault = () => cfg.adminHash === DEFAULT_ADMIN_HASH && process.env.NODE_ENV === 'production';
