@@ -72,7 +72,7 @@ const csrfOk = (req) => {
   const a = String(req.body?.csrf || ''), b = String(req.session.csrf || '');
   return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 };
-const seatsTaken = () => db.prepare('SELECT COUNT(*) c FROM registrations').get().c;
+const seatsTaken = () => db.prepare('SELECT COUNT(*) c FROM registrations WHERE cancelled_at IS NULL').get().c;   // a cancelled registration frees its seat
 const seatsLeft = () => Math.max(0, cfg.seatLimit - seatsTaken());
 const DEFAULT_ADMIN_HASH = '$2b$12$yIUnLxFZjgLscFLScT/OUe7lJqmO0cqyNZoDeEYq4KNs9cPqKth4u';
 const adminTag = () => crypto.createHmac('sha256', SECRET).update(cfg.adminUser + '|' + cfg.adminHash).digest('hex').slice(0, 20);   // changes when the admin password changes: older sessions stop working
@@ -381,7 +381,12 @@ const currentReg = (req) => {
   return r && (req.session.pv || '') === (r.pw_set_at || '') ? r : null;        // a password change signs out every other device
 };
 const setPP = (req, r) => { req.session.pp = r.id; req.session.pv = r.pw_set_at || ''; };
-const requireReg = (req, res, next) => { const r = currentReg(req); if (!r) { req.session.pp = null; return res.redirect(cfg.base + '/login'); } req.reg = r; next(); };
+const CANCELLED_OK = new Set(['/account', '/account/reinstate', '/account/delete', '/account/receipt']);
+const requireReg = (req, res, next) => {
+  const r = currentReg(req); if (!r) { req.session.pp = null; return res.redirect(cfg.base + '/login'); }
+  if (r.cancelled_at && !CANCELLED_OK.has(req.path)) return req.method === 'GET' ? res.redirect(cfg.base + '/account') : (res.status(409), req.get('X-CSRF') ? res.json({ ok: false, error: 'This registration was cancelled.' }) : res.redirect(cfg.base + '/account'));
+  req.reg = r; next();
+};
 const ppSignIn = (req, res, r, welcome) => {
   db.prepare('UPDATE registrations SET last_login=? WHERE id=?').run(new Date().toISOString(), r.id);
   req.session = { pp: r.id, pv: r.pw_set_at || '', csrf: crypto.randomBytes(24).toString('hex') };              // fresh session on sign-in
@@ -467,7 +472,94 @@ router.post('/login/reset', async (req, res) => {
   ppSignIn(req, res, db.prepare('SELECT * FROM registrations WHERE id=?').get(r.id), r.pw_hash ? 'Your password has been changed.' : 'Your password is set. Next time, sign in with your email and password.');
 });
 router.post('/logout', (req, res) => { req.session = null; res.redirect(cfg.base + '/login'); });
-router.get('/account', requireReg, (req, res) => { if (req.query.cancelled !== undefined) flash(req, '', 'Payment cancelled — nothing was charged. You can try again whenever you are ready.'); const pform = req.session.pform || null; req.session.pform = null; const prform = req.session.prform || null; req.session.prform = null; html(res, views.account({ pform, prform, r: req.reg, csrf: csrfToken(req), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined, modes: payModes(), stripeAmount: (() => { const p = stripe.parseFee(req.reg.fee); return p ? stripe.money(p.currency, p.amount) : ''; })() })); });
+// ── conference pass: a QR code that opens the check-in page for desk staff ──
+const QR = require('qrcode');
+const paidOf = (r) => r.pay_status === 'paid' || r.pay_status === 'waived';
+function checkinToken(r) {
+  if (r.checkin_token) return r.checkin_token;
+  const t = crypto.randomBytes(18).toString('base64url');
+  db.prepare('UPDATE registrations SET checkin_token=? WHERE id=? AND checkin_token IS NULL').run(t, r.id);
+  return db.prepare('SELECT checkin_token FROM registrations WHERE id=?').get(r.id).checkin_token;
+}
+async function passSvg(r) {
+  if (!paidOf(r) || r.cancelled_at) return '';
+  try { return await QR.toString(`${views.SITE}/checkin/t/${checkinToken(r)}`, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#12285C', light: '#FFFFFF' } }); } catch (_) { return ''; }
+}
+router.get('/account/pass', requireReg, async (req, res) => { const svg = await passSvg(req.reg); if (!svg) return res.redirect(cfg.base + '/account'); html(res, views.passPage({ r: req.reg, svg })); });
+// ── cancelling, reinstating, deleting (participant) ──
+const notifyTo = () => cfg.notifyEmail || cfg.smtp.replyTo;
+router.post('/account/cancel', requireReg, (req, res) => {
+  const r = req.reg, b = req.body || {};
+  if (!csrfOk(req)) { flash(req, '', 'Your session expired. Please try again.'); return res.redirect(cfg.base + '/account#cancel'); }
+  if (r.cancelled_at) return res.redirect(cfg.base + '/account');
+  if (r.attended || r.cert_issued_at) { flash(req, '', 'You have already attended, so the registration cannot be cancelled here. Please email the organisers.'); return res.redirect(cfg.base + '/account#cancel'); }
+  const reason = String(b.reason || '').replace(/\s+/g, ' ').trim().slice(0, 120), note = String(b.note || '').replace(/\r/g, '').trim().slice(0, 1000);
+  db.prepare('UPDATE registrations SET cancelled_at=?, cancel_reason=?, cancel_note=? WHERE id=?').run(new Date().toISOString(), reason || null, note || null, r.id);
+  const paid = paidOf(r);
+  mail.send({ to: r.email, ...mail.cancelEmail({ name: r.full_name, ref: r.ref, paid }) }).catch((err) => console.warn('cancel mail:', err.message));
+  if (notifyTo()) mail.send({ to: notifyTo(), ...mail.cancelNoticeEmail({ r, reason, note }) }).catch((err) => console.warn('cancel notice:', err.message));
+  flash(req, 'Your registration has been cancelled. The organisers have been told, and a confirmation is on its way to your email.');
+  res.redirect(cfg.base + '/account');
+});
+router.post('/account/reinstate', requireReg, (req, res) => {
+  const r = req.reg;
+  if (!csrfOk(req) || !r.cancelled_at) return res.redirect(cfg.base + '/account');
+  if (!regOpenNow()) { flash(req, '', 'Registration is closed, so it cannot be reinstated here. Please email the organisers.'); return res.redirect(cfg.base + '/account'); }
+  db.prepare('UPDATE registrations SET cancelled_at=NULL WHERE id=?').run(r.id);
+  if (notifyTo()) mail.send({ to: notifyTo(), subject: `Reinstated: ${r.full_name} (${r.ref})`, text: `${r.full_name} (${r.email}) reinstated their ${cfg.eventName} registration ${r.ref}.\n\n${views.SITE}/admin?q=${encodeURIComponent(r.ref)}` }).catch(() => {});
+  flash(req, 'Welcome back — your registration is active again.'); res.redirect(cfg.base + '/account');
+});
+router.post('/account/delete', requireReg, (req, res) => {
+  const r = req.reg;
+  if (!csrfOk(req) || !r.cancelled_at) return res.redirect(cfg.base + '/account');
+  if (paidOf(r) || r.pay_status === 'claimed') { flash(req, '', 'A payment record exists, so the registration cannot be deleted here. Please email the organisers.'); return res.redirect(cfg.base + '/account'); }
+  for (const f of [r.ext_file, r.fp_file]) if (f) SUB.removeFile(f);
+  db.prepare('DELETE FROM registrations WHERE id=?').run(r.id);
+  if (notifyTo()) mail.send({ to: notifyTo(), subject: `Deleted by participant: ${r.ref}`, text: `The participant with reference ${r.ref} deleted their cancelled, unpaid registration and its data.` }).catch(() => {});
+  req.session = null; res.redirect(cfg.base + '/?deleted=1');
+});
+// ── on-site check-in: organisers (admin session) or desk staff with the desk PIN ──
+const deskTag = () => (cfg.checkinPin ? hmac('desk:' + cfg.checkinPin).slice(0, 24) : '');
+const isAdminReq = (req) => !!(req.session.admin && req.session.av === adminTag() && !adminDefault());
+const deskOk = (req) => isAdminReq(req) || (!!deskTag() && req.session.desk === deskTag());
+const deskWho = (req) => (isAdminReq(req) ? 'organiser' : 'desk');
+const ckHits = new Map();
+function requireDesk(req, res, next) { if (deskOk(req)) return next(); req.session.deskNext = req.originalUrl; html(res, views.checkinLogin({ csrf: csrfToken(req), error: cfg.checkinPin ? '' : 'The desk PIN has not been set yet. An organiser can set it in Admin → Settings → Certificates, or sign in to the admin pages.' })); }
+router.get('/checkin', requireDesk, (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 80); let rows = [];
+  if (q) { const like = '%' + q.replace(/[\\%_]/g, '\\$&') + '%'; rows = db.prepare("SELECT * FROM registrations WHERE full_name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR ref LIKE ? ESCAPE '\\' ORDER BY full_name LIMIT 30").all(like, like, like); }
+  const stats = db.prepare("SELECT COALESCE(SUM(pay_status IN ('paid','waived') AND cancelled_at IS NULL),0) paid, COALESCE(SUM(attended=1),0) \"in\" FROM registrations").get();
+  const fm = req.session.ckmsg || ''; req.session.ckmsg = null;
+  html(res, views.checkinDesk({ csrf: csrfToken(req), q, rows, stats, flashMsg: fm }));
+});
+router.post('/checkin/login', (req, res) => {
+  const ip = req.ip || '', now = Date.now(), h = (ckHits.get(ip) || []).filter((t) => now - t < 15 * 60e3);
+  if (h.length >= 10) return res.status(429).send(views.checkinLogin({ csrf: csrfToken(req), error: 'Too many attempts. Wait 15 minutes.' }));
+  const pin = String((req.body || {}).pin || '');
+  if (!csrfOk(req) || !cfg.checkinPin || pin.length !== cfg.checkinPin.length || !safeEq(pin, cfg.checkinPin)) { h.push(now); ckHits.set(ip, h); return html(res, views.checkinLogin({ csrf: csrfToken(req), error: 'That PIN is not correct.' })); }
+  const next = req.session.deskNext && String(req.session.deskNext).startsWith(cfg.base + '/checkin') ? req.session.deskNext : cfg.base + '/checkin';
+  req.session.desk = deskTag(); req.session.deskNext = null; res.redirect(next);
+});
+router.post('/checkin/logout', (req, res) => { if (csrfOk(req)) req.session.desk = null; res.redirect(cfg.base + '/checkin'); });
+router.get('/checkin/t/:token', requireDesk, (req, res) => {
+  const r = db.prepare('SELECT * FROM registrations WHERE checkin_token=?').get(String(req.params.token).slice(0, 60));
+  if (!r) return res.status(404).send(views.checkinDesk({ csrf: csrfToken(req), flashMsg: 'This pass was not recognised. Search for the person instead.' }));
+  res.redirect(cfg.base + '/checkin/id/' + r.id);
+});
+router.get('/checkin/id/:id', requireDesk, (req, res) => { const r = regById(req.params.id); if (!r) return res.redirect(cfg.base + '/checkin'); html(res, views.checkinPerson({ csrf: csrfToken(req), r, done: req.query.done !== undefined })); });
+router.post('/checkin/id/:id', requireDesk, (req, res) => {
+  const r = regById(req.params.id); if (!r || !csrfOk(req)) return res.redirect(cfg.base + '/checkin');
+  if (r.cancelled_at) return res.redirect(cfg.base + '/checkin/id/' + r.id);
+  if (!paidOf(r) && (req.body || {}).override !== '1') return res.redirect(cfg.base + '/checkin/id/' + r.id);
+  if (!r.attended) db.prepare('UPDATE registrations SET attended=1, checkin_at=?, checkin_by=? WHERE id=?').run(new Date().toISOString(), deskWho(req) + (paidOf(r) ? '' : ' (unpaid, override)'), r.id);
+  res.redirect(cfg.base + '/checkin/id/' + r.id + '?done');
+});
+router.post('/checkin/id/:id/undo', requireDesk, (req, res) => {
+  const r = regById(req.params.id); if (!r || !csrfOk(req)) return res.redirect(cfg.base + '/checkin');
+  if (!r.cert_issued_at) db.prepare('UPDATE registrations SET attended=0, checkin_at=NULL, checkin_by=NULL WHERE id=?').run(r.id);
+  req.session.ckmsg = `Check-in undone for ${r.full_name}.`; res.redirect(cfg.base + '/checkin');
+});
+router.get('/account', requireReg, async (req, res) => { if (req.query.cancelled !== undefined) flash(req, '', 'Payment cancelled — nothing was charged. You can try again whenever you are ready.'); const pform = req.session.pform || null; req.session.pform = null; const prform = req.session.prform || null; req.session.prform = null; html(res, views.account({ pform, prform, r: req.reg, csrf: csrfToken(req), passSvg: await passSvg(req.reg), canReinstate: req.reg.cancelled_at && regOpenNow(), flash: takeFlash(req), payUrl: settings.payUrl(req.reg.category), welcome: req.query.welcome !== undefined, modes: payModes(), stripeAmount: (() => { const p = stripe.parseFee(req.reg.fee); return p ? stripe.money(p.currency, p.amount) : ''; })() })); });
 // Stripe: card / FPX / GrabPay through Stripe Checkout; confirmed by the webhook (and by the return page, in case the webhook is slow)
 const payModes = () => {
   const st = stripe.configured() && (cfg.payProvider === 'stripe' || cfg.payProvider === 'both');
@@ -896,7 +988,7 @@ router.post('/admin/login', (req, res) => {
 router.post('/admin/logout', (req, res) => { req.session = null; res.redirect(cfg.base + '/admin/login'); });
 
 // ── participants: server-side search, filters, sorting and pagination (built for 100k+ rows) ──
-const STATUSES = ['all', 'attended', 'absent', 'issued', 'pending'];       // pending = attended but no certificate yet
+const STATUSES = ['all', 'active', 'cancelled', 'attended', 'absent', 'issued', 'pending'];       // pending = attended but no certificate yet
 const SORTS = { newest: 'id DESC', oldest: 'id ASC', name: 'full_name COLLATE NOCASE ASC, id ASC', org: 'organisation COLLATE NOCASE ASC, id ASC' };
 const PERS = [25, 50, 100, 200];
 const PAYS = ['all', 'unpaid', 'claimed', 'paid', 'waived'];
@@ -924,7 +1016,9 @@ function adminFilter(q) {
     p.push(like, like, like, like);
   }
   const status = STATUSES.includes(q.status) ? q.status : 'all';
-  if (status === 'attended') w.push('attended=1');
+  if (status === 'active') w.push('cancelled_at IS NULL');
+  else if (status === 'cancelled') w.push('cancelled_at IS NOT NULL');
+  else if (status === 'attended') w.push('attended=1');
   else if (status === 'absent') w.push('attended=0');
   else if (status === 'issued') w.push('cert_issued_at IS NOT NULL');
   else if (status === 'pending') w.push('attended=1 AND cert_issued_at IS NULL');
@@ -941,11 +1035,11 @@ const filterQS = (f, extra = {}) => new URLSearchParams(Object.entries({ q: f.q,
 
 router.get('/admin', requireAdmin, (req, res) => {
   const { where, p, f } = adminFilter(req.query);
-  const stats = db.prepare("SELECT COUNT(*) total, COALESCE(SUM(attended),0) att, COALESCE(SUM(cert_issued_at IS NOT NULL),0) iss, COALESCE(SUM(pay_status='paid'),0) paid, COALESCE(SUM(pay_status='claimed'),0) claimed, COALESCE(SUM(pay_status='unpaid'),0) unpaid FROM registrations").get();
+  const stats = db.prepare("SELECT COALESCE(SUM(cancelled_at IS NULL),0) total, COALESCE(SUM(cancelled_at IS NOT NULL),0) cancelled, COALESCE(SUM(attended),0) att, COALESCE(SUM(cert_issued_at IS NOT NULL),0) iss, COALESCE(SUM(pay_status='paid' AND cancelled_at IS NULL),0) paid, COALESCE(SUM(pay_status='claimed' AND cancelled_at IS NULL),0) claimed, COALESCE(SUM(pay_status='unpaid' AND cancelled_at IS NULL),0) unpaid FROM registrations").get();
   const total = where ? db.prepare(`SELECT COUNT(*) c FROM registrations ${where}`).get(...p).c : stats.total;
   const pages = Math.max(1, Math.ceil(total / f.per));
   const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
-  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,department,participation,paper_title,abstract IS NOT NULL AND abstract<>'' abstract,coauthors,authors,keywords,ext_file,ext_name,ext_at,fp_file,fp_name,fp_at,abs_status,ext_status,fp_status,review_note,pres_at,mass_no,diet,diet_note,dinner,billing,pay_source,pay_note,last_login,profile_at,pw_hash IS NOT NULL has_pw,authors,keywords,abs_status,ext_name,ext_file,ext_status,fp_name,fp_file,fp_status FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
+  const rows = db.prepare(`SELECT id,ref,full_name,email,phone,organisation,category,country,created_at,attended,cert_issued_at,method,fee,pay_status,pay_ref,pay_amount,paid_at,pay_claimed_at,salutation,designation,department,participation,cancelled_at,cancel_reason,cancel_note,checkin_at,checkin_by,abs_mailed_at,ext_mailed_at,fp_mailed_at,paper_title,abstract IS NOT NULL AND abstract<>'' abstract,coauthors,authors,keywords,ext_file,ext_name,ext_at,fp_file,fp_name,fp_at,abs_status,ext_status,fp_status,review_note,pres_at,mass_no,diet,diet_note,dinner,billing,pay_source,pay_note,last_login,profile_at,pw_hash IS NOT NULL has_pw,authors,keywords,abs_status,ext_name,ext_file,ext_status,fp_name,fp_file,fp_status FROM registrations ${where} ORDER BY ${SORTS[f.sort]} LIMIT ? OFFSET ?`).all(...p, f.per, (page - 1) * f.per);
   html(res, adminViews.dashboard({ rows, stats, total, page, pages, f, cats: CATS, statuses: STATUSES, pays: PAYS, pers: PERS, qs: filterQS(f), csrf: csrfToken(req), flash: takeFlash(req) }));
 });
 
@@ -968,13 +1062,22 @@ router.post('/admin/review', requireAdmin, (req, res) => {
     const status = ['', 'accepted', 'revise', 'rejected'].includes(b.status) ? b.status : '';
     db.prepare(`UPDATE registrations SET ${k}_status=?, review_at=? WHERE id=?`).run(status, t, r.id);
   }
-  if (b.note !== undefined) db.prepare('UPDATE registrations SET review_note=?, review_at=? WHERE id=?').run(String(b.note || '').replace(/\r/g, '').trim().slice(0, 1500), t, r.id);
+  const note = b.note !== undefined ? String(b.note || '').replace(/\r/g, '').trim().slice(0, 1500) : (r.review_note || '');
+  if (b.note !== undefined) db.prepare('UPDATE registrations SET review_note=?, review_at=? WHERE id=?').run(note, t, r.id);
+  // optional: tell the author, with a link to sign in to their dashboard
+  if (b.notify === '1' && ['abs', 'ext', 'fp'].includes(k) && ['accepted', 'revise', 'rejected'].includes(b.status)) {
+    if (!mail.configured()) return res.json({ ok: true, mailed: false, error: 'Saved, but email is not set up (Settings → Emails), so the author was not emailed.' });
+    mail.send({ to: r.email, ...mail.reviewEmail({ name: r.full_name, email: r.email, ref: r.ref, stage: k, status: b.status, title: r.paper_title, note }) })
+      .then(() => db.prepare(`UPDATE registrations SET ${k}_mailed_at=? WHERE id=?`).run(new Date().toISOString(), r.id))
+      .catch((err) => console.warn('review mail:', err.message));
+    return res.json({ ok: true, mailed: true });
+  }
   res.json({ ok: true });
 });
 // abstract book: every presenter with a title (and invited speakers with a talk), as one PDF or as LaTeX source
 function bookList(q) {
   const which = String(q.which || 'all'), st = String(q.status || '');
-  const regs = which === 'speakers' ? [] : db.prepare(`SELECT * FROM registrations WHERE paper_title IS NOT NULL AND paper_title<>'' AND abstract IS NOT NULL AND abstract<>''
+  const regs = which === 'speakers' ? [] : db.prepare(`SELECT * FROM registrations WHERE cancelled_at IS NULL AND paper_title IS NOT NULL AND paper_title<>'' AND abstract IS NOT NULL AND abstract<>''
       ${which === 'oral' ? "AND participation LIKE 'Oral%'" : which === 'poster' ? "AND participation LIKE 'Poster%'" : "AND participation LIKE '%presentation%'"} ${st === 'accepted' ? "AND abs_status='accepted'" : st === 'notrejected' ? "AND COALESCE(abs_status,'')<>'rejected'" : ''}
       ORDER BY participation, paper_title COLLATE NOCASE LIMIT 5000`).all();
   const sp = which === 'all' || which === 'speakers' ? speakers.published().filter((x) => x.talk_title && x.abstract) : [];
@@ -1016,7 +1119,9 @@ router.post('/admin/action', requireAdmin, (req, res) => {
   if (act === 'paid') { const n = confirmPayments(pickIds()); flash(req, `${n} payment${n === 1 ? '' : 's'} marked as paid${cfg.payEmail && n ? '; confirmation emails are being sent' : ''}.`); }
   else if (act === 'unpaid') { run({ pre: "UPDATE registrations SET pay_status='unpaid', paid_at=NULL, pay_source=NULL" }, []); flash(req, 'Payment status set back to unpaid.'); }
   else if (act === 'waived') { run({ pre: "UPDATE registrations SET pay_status='waived', paid_at=NULL, pay_source='manual', pay_note=COALESCE(pay_note,'waived by organiser')" }, []); flash(req, 'Marked as not requiring payment.'); }
-  else if (act === 'attended') run({ pre: 'UPDATE registrations SET attended=1' }, []);
+  else if (act === 'attended') run({ pre: "UPDATE registrations SET attended=1, checkin_at=COALESCE(checkin_at, datetime('now')), checkin_by=COALESCE(checkin_by,'organiser (marked)')" }, []);
+  else if (act === 'reinstate') { run({ pre: 'UPDATE registrations SET cancelled_at=NULL' }, []); flash(req, 'Registration reinstated.'); }
+  else if (act === 'cancel') { run({ pre: "UPDATE registrations SET cancelled_at=COALESCE(cancelled_at, datetime('now')), cancel_reason=COALESCE(cancel_reason,'Cancelled by the organisers')" }, []); flash(req, 'Registration cancelled (seat released). No email was sent.'); }
   else if (act === 'unattended') run({ pre: 'UPDATE registrations SET attended=0' }, []);
   else if (act === 'revoke') { run({ pre: 'UPDATE registrations SET cert_issued_at=NULL' }, []); flash(req, 'Certificates withdrawn: they no longer verify, and participants can download again if they are still eligible.'); }
   else if (act === 'delete') {
@@ -1100,7 +1205,7 @@ function matchImport(text) {
   return out;
 }
 router.get('/admin/submissions', requireAdmin, (req, res) => {
-  const P = "participation LIKE '%presentation%'";
+  const P = "participation LIKE '%presentation%' AND cancelled_at IS NULL";
   const q = (sql) => db.prepare(sql).get();
   const stats = { presenters: q(`SELECT COUNT(*) n FROM registrations WHERE ${P}`).n };
   for (const [k, done] of [['abs', "paper_title IS NOT NULL AND paper_title<>'' AND abstract IS NOT NULL AND abstract<>''"], ['ext', 'ext_file IS NOT NULL'], ['fp', 'fp_file IS NOT NULL']])

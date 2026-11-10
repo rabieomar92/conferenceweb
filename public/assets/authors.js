@@ -48,7 +48,7 @@
     }
     // ── dialog ──
     var dlg = document.createElement('dialog'); dlg.className = 'au-dlg'; dlg.setAttribute('aria-labelledby', 'auT' + input.id);
-    dlg.innerHTML = '<form method="dialog" class="au-f" novalidate><div class="au-hd"><h3 id="auT' + input.id + '"></h3><button type="button" class="au-x" aria-label="' + T('Close') + '">×</button></div>' +
+    dlg.innerHTML = '<form method="dialog" class="au-f" novalidate><div class="au-hd"><h3 id="auT' + input.id + '"></h3><button type="button" class="au-x" aria-label="' + T('Close') + '"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button></div>' +
       '<div class="au-bd"><label class="l" for="auN' + input.id + '">' + T('Full name') + '</label><input id="auN' + input.id + '" maxlength="120" autocomplete="off" placeholder="' + T('e.g. Nur Aisyah Rahman') + '">' +
       '<label class="l" for="auE' + input.id + '">' + T('Email') + ' <span class="opt">' + T('(needed for the corresponding author)') + '</span></label><input id="auE' + input.id + '" type="email" maxlength="160" autocomplete="off">' +
       '<fieldset class="au-fs"><legend class="l">' + T('Affiliations') + '</legend><div class="au-opts"></div>' +
