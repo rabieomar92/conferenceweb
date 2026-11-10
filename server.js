@@ -909,7 +909,7 @@ router.post('/admin/speakers/:id', requireAdmin, admSpeaker, async (req, res) =>
   const other = v.email_key && speakers.byEmailKey(v.email_key);
   if (other && other.id !== req.spk.id) errors.push('Another speaker already uses that email address.');
   if (errors.length) return html(res, spv.adminEdit({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: errors }, topbar: admBar(req, 'Speakers'), ver: speakers.verOf(req.spk) }), 400);
-  const changed = speakers.slotKey(v) !== speakers.slotKey(req.spk);
+  const changed = speakers.slotKey(v) !== speakers.slotKey(req.spk) || (v.slot_venue || null) !== (req.spk.slot_venue || null);
   if (changed && req.body.sched_ok !== '1') return html(res, spv.adminEdit({ s: { ...req.spk, ...v }, csrf: csrfToken(req), flash: { ok: '', err: ['Please confirm the new talk date and time before saving.'] }, topbar: admBar(req, 'Speakers'), ver: speakers.verOf(req.spk) }), 400);
   speakers.save(req.spk.id, v, 'organiser');
   let note = '';
@@ -917,7 +917,7 @@ router.post('/admin/speakers/:id', requireAdmin, admSpeaker, async (req, res) =>
     const cur = speakers.byId(req.spk.id);
     if (!cur.email) note = ' No email was sent because this speaker has no email address.';
     else {                                                     // sent in the background: a slow mail server must never hold up saving
-      const m = mail.speakerScheduleEmail({ name: cur.full_name, talkTitle: cur.talk_title, dateLabel: cfg.eventDayLabel(cur.slot_date), timeText: speakers.timeText(cur), venue: cfg.eventVenue, changed: !!req.spk.slot_date, portalLink: speakers.state(cur) === 'active' ? `${views.SITE}/speaker` : '' });
+      const m = mail.speakerScheduleEmail({ name: cur.full_name, talkTitle: cur.talk_title, dateLabel: cfg.eventDayLabel(cur.slot_date), timeText: speakers.timeText(cur), venue: cfg.eventVenue, room: SCH.venueName(cur.slot_venue), changed: !!req.spk.slot_date, portalLink: speakers.state(cur) === 'active' ? `${views.SITE}/speaker` : '' });
       mail.send({ to: cur.email, subject: m.subject, text: m.text, html: m.html })
         .then(() => speakers.markSlotSent(cur.id, cur))
         .catch((ex) => { console.error('Schedule email failed:', ex.message); speakers.markSlotFail(cur.id, ex.message); });
@@ -1142,6 +1142,69 @@ function certSource(q) {
   const { where, p, f } = adminFilter({ ...q, status: q.status || (q.scope === 'attended' ? 'attended' : 'all') });
   return { where, p, src: filterQS(f) };
 }
+// ── Programme: venues and the schedule of every talk and item ──
+const SCH = require('./lib/schedule');
+router.get('/admin/programme', requireAdmin, (req, res) => {
+  const list = SCH.entries();
+  html(res, adminViews.programme({ list, venues: SCH.venues(), use: SCH.venueUse(), clash: SCH.clashes(list), days: cfg.eventDays || [], dayLabel: cfg.eventDayLabel, liveOn: !!SCH.publicDays(), csrf: csrfToken(req), flash: takeFlash(req) }));
+});
+const progBack = (res, v) => res.redirect(cfg.base + '/admin/programme' + (v && v.slot_date ? '#d' + (cfg.eventDays || []).indexOf(v.slot_date) : v ? '#un' : ''));
+router.post('/admin/programme/save', requireAdmin, (req, res) => {
+  const b = req.body || {}; if (!csrfOk(req)) { flash(req, '', 'Your session expired. Please try again.'); return progBack(res); }
+  const type = b.type, id = parseInt(b.id, 10) || 0;
+  const { v, errors } = SCH.readSlot(b);
+  const now = new Date().toISOString();
+  let who = '', rec = null;
+  if (type === 'item') {
+    const title = String(b.title || '').replace(/\s+/g, ' ').trim().slice(0, 160), kind = SCH.KIND_KEYS.includes(b.kind) ? b.kind : 'other', host = String(b.who || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    if (!title) errors.push('Please give the item a title.');
+    if (errors.length) { flash(req, '', errors); return progBack(res, v); }
+    if (id) db.prepare('UPDATE prog_items SET kind=?, title=?, who=?, slot_date=?, slot_start=?, slot_end=?, slot_venue=?, ok=?, updated_at=? WHERE id=?').run(kind, title, host, v.slot_date || null, v.slot_start || null, v.slot_end || null, v.slot_venue, v.slot_ok, now, id);
+    else db.prepare('INSERT INTO prog_items (kind, title, who, slot_date, slot_start, slot_end, slot_venue, ok, updated_at) VALUES (?,?,?,?,?,?,?,?,?)').run(kind, title, host, v.slot_date || null, v.slot_start || null, v.slot_end || null, v.slot_venue, v.slot_ok, now);
+    who = title;
+  } else if (type === 'spk' || type === 'reg') {
+    const T = type === 'spk' ? 'speakers' : 'registrations';
+    rec = db.prepare(`SELECT * FROM ${T} WHERE id=?`).get(id);
+    if (!rec) { flash(req, '', 'That presenter no longer exists.'); return progBack(res); }
+    if (errors.length) { flash(req, '', errors); return progBack(res, v); }
+    db.prepare(`UPDATE ${T} SET slot_date=?, slot_start=?, slot_end=?, slot_venue=?, slot_code=?, slot_ok=? WHERE id=?`).run(v.slot_date || null, v.slot_start || null, v.slot_end || null, v.slot_venue, v.slot_code || null, v.slot_ok, id);
+    if (type === 'spk') db.prepare('UPDATE speakers SET updated_at=?, updated_by=? WHERE id=?').run(now, 'organiser', id);
+    who = rec.full_name;
+  } else return progBack(res);
+  // tell the presenter (in the background, so a slow mail server never holds up saving)
+  let note = '';
+  if (rec && b.notify === '1') {
+    if (!v.slot_date || !v.slot_start) note = ' No email was sent: set the day and start time first.';
+    else if (!rec.email) note = ' No email was sent: there is no email address.';
+    else if (!mail.configured()) note = ' No email was sent: email is not set up yet (Settings → Emails).';
+    else {
+      const m = mail.speakerScheduleEmail({ name: rec.full_name, talkTitle: type === 'spk' ? rec.talk_title : rec.paper_title, dateLabel: cfg.eventDayLabel(v.slot_date), timeText: v.slot_end ? `${v.slot_start} – ${v.slot_end}` : v.slot_start, venue: cfg.eventVenue, room: SCH.venueName(v.slot_venue), changed: !!rec.slot_sent_at,
+        portalLink: type === 'spk' ? `${views.SITE}/speaker` : `${views.SITE}/login`, portalLabel: type === 'spk' ? 'Open speaker portal' : 'Open my dashboard' });
+      const T = type === 'spk' ? 'speakers' : 'registrations';
+      mail.send({ to: rec.email, subject: m.subject, text: m.text, html: m.html })
+        .then(() => { db.prepare(`UPDATE ${T} SET slot_sent_at=? WHERE id=?`).run(new Date().toISOString(), id); if (type === 'spk') speakers.markSlotSent(id, { ...rec, ...v }); })
+        .catch((ex) => console.error('Schedule email failed:', ex.message));
+      note = ` The schedule is being emailed to ${rec.email}.`;
+    }
+  }
+  const list = SCH.entries(), key = (type === 'item' ? 'item-' : type + '-') + (id || db.prepare('SELECT MAX(id) m FROM prog_items').get().m), c = SCH.clashes(list).get(key);
+  flash(req, `Saved ${who}.${v.slot_ok ? ' It is on the website programme.' : v.slot_date ? ' It is not on the website yet.' : ''}${note}`, c ? [`Room clash: ${SCH.venueName(v.slot_venue)} already has ${c.type === 'item' ? c.title : c.who} at ${c.slot_start}${c.slot_end ? '–' + c.slot_end : ''}.`] : []);
+  progBack(res, v);
+});
+router.post('/admin/programme/item-delete', requireAdmin, (req, res) => {
+  if (csrfOk(req)) { db.prepare('DELETE FROM prog_items WHERE id=?').run(parseInt((req.body || {}).id, 10) || 0); flash(req, 'Item deleted.'); }
+  progBack(res);
+});
+router.post('/admin/programme/venue', requireAdmin, (req, res) => {
+  if (!csrfOk(req)) { flash(req, '', 'Your session expired. Please try again.'); return progBack(res); }
+  const id = parseInt((req.body || {}).id, 10) || 0, r = SCH.saveVenue(id, req.body || {});
+  if (r.error) flash(req, '', r.error); else flash(req, id ? 'Venue updated. Every talk in it now shows the new name.' : 'Venue added.');
+  progBack(res);
+});
+router.post('/admin/programme/venue-delete', requireAdmin, (req, res) => {
+  if (csrfOk(req)) { const n = SCH.deleteVenue(parseInt((req.body || {}).id, 10) || 0); flash(req, `Venue deleted.${n ? ` ${n} ${n === 1 ? 'entry is' : 'entries are'} now “To be confirmed”.` : ''}`); }
+  progBack(res);
+});
 router.get('/admin/certificates', requireAdmin, (req, res) => {
   const { where, p, src } = certSource(req.query);
   const hasFilter = !!(req.query.ids || req.query.scope || req.query.q || req.query.status || req.query.cat);

@@ -1392,3 +1392,7 @@ dialog.au-dlg .au-f{display:flex;flex-direction:column;min-height:0;flex:1 1 aut
 :root body .b2.lnk{background:#F1F0EC;color:var(--muted);border-color:transparent}
 :root body .b2.lnk:hover{background:var(--navy);color:#fff}
 :root body .b2:disabled,:root body .b2:disabled:hover{opacity:.45;background:#E8ECF4;color:var(--navy);cursor:default}
+/* programme: venue still to be confirmed */
+.pb .wh.tbc,.room .rn.tbc{color:var(--muted)!important;font-style:italic}
+.pb.plenary .wh.tbc,.pb.gala .wh.tbc{color:rgba(255,255,255,.55)!important}
+.slotc .hint{margin:12px 0 0;font-size:14.5px;color:var(--ink-2)}

@@ -51,7 +51,7 @@
   var sf = d.querySelector('form[data-orig]'), md = d.getElementById('schedModal');
   if (sf && md) {
     var lab = {}; try { lab = JSON.parse(sf.getAttribute('data-labels') || '{}'); } catch (_) {}
-    var q = function (n) { return sf.elements[n]; }, key = function () { return [q('slot_date').value, q('slot_start').value, q('slot_end').value].join('|'); };
+    var q = function (n) { return sf.elements[n]; }, key = function () { return [q('slot_date').value, q('slot_start').value, q('slot_end').value].concat(q('slot_venue') ? [q('slot_venue').value] : []).join('|'); };
     var orig = sf.getAttribute('data-orig'), mail = sf.getAttribute('data-email'), okBtn = d.getElementById('mdlOk'), last = null;
     function span(a) { return a[1] ? (a[2] ? a[1] + ' – ' + a[2] : a[1]) : ''; }
     function close() { md.hidden = true; sf.dispatchEvent(new Event('input')); if (last) last.focus(); }
@@ -62,7 +62,7 @@
       if (!clear && (!n[0] || !n[1])) { alert((window.T||{})['Please choose both a date and a start time, or leave the schedule empty.']||'Please choose both a date and a start time, or leave the schedule empty.'); return; }
       md.querySelector('#mdlT').textContent = clear ? 'Remove the schedule?' : (o[0] ? 'Change this talk time?' : 'Set this talk time?');
       md.querySelector('.mdl-who').textContent = sf.getAttribute('data-spk') + (clear ? ' will no longer have a date and time on the website.' : ' will be shown on the website with this schedule.');
-      md.querySelector('[data-d]').textContent = clear ? '—' : (lab[n[0]] || n[0]); md.querySelector('[data-t]').textContent = clear ? '—' : span(n);
+      md.querySelector('[data-d]').textContent = clear ? '—' : (lab[n[0]] || n[0]); md.querySelector('[data-t]').textContent = clear ? '—' : span(n) + (q('slot_venue') ? ' · ' + q('slot_venue').options[q('slot_venue').selectedIndex].text : '');
       md.querySelector('.mdl-was').textContent = o[0] ? 'Currently: ' + (lab[o[0]] || o[0]) + ', ' + span(o) : '';
       var ml = md.querySelector('.mdl-mail'); ml.classList.toggle('off', clear || !mail); md.querySelector('[data-to]').textContent = mail ? '(' + mail + ')' : '';
       d.getElementById('mdlNotify').checked = !!mail; md.hidden = false; okBtn.focus();
