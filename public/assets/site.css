@@ -1399,3 +1399,9 @@ dialog.au-dlg .au-f{display:flex;flex-direction:column;min-height:0;flex:1 1 aut
 /* faint silicon wafer behind the hero crystal */
 .hero img.wafer{position:absolute;z-index:0;pointer-events:none;transform:translate(-50%,-50%) scale(calc(1 + var(--p,0) * .45));opacity:calc(.5 - var(--p,0) * .5);max-width:none;user-select:none}
 @media(max-width:860px){.hero img.wafer{opacity:.4}}
+/* Topics on deep navy (the poster's band colour) */
+section.s#topics{background:#12285C;border-bottom-color:#12285C;color:#fff}
+#topics .sec-label h2{color:#fff}
+#topics .tlist{border-top-color:rgba(255,255,255,.55)}
+#topics .tlist li,#topics .tlist li:hover{color:#fff;border-bottom-color:rgba(255,255,255,.14)}
+#topics .tlist li:hover{color:var(--amber-lt)}
