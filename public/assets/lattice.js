@@ -12,13 +12,16 @@
   var me = document.querySelector('script[src*="lattice.js"]'), wf = document.createElement('img');
   wf.src = (me ? me.src.replace(/lattice\.js.*$/, '') : '/assets/') + 'wafer.svg'; wf.alt = ''; wf.className = 'wafer'; wf.setAttribute('aria-hidden', 'true'); wf.decoding = 'async';
   stick.insertBefore(wf, cv);
+  // one registration button at a time: the header's appears only once the hero's has scrolled away
+  var cta = hero.querySelector('a.btn[href$="/register"]');
+  if (cta && 'IntersectionObserver' in window) { document.documentElement.classList.add('cta-here'); new IntersectionObserver(function (es) { document.documentElement.classList.toggle('cta-here', es[0].isIntersecting); }).observe(cta); }
   var g = cv.getContext('2d'); if (!g) return;
   var still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   var de = document.documentElement, header = document.querySelector('header.top');
 
   // ── headline: each word rises out of a mask ──
   var h1 = hero.querySelector('h1');
-  if (h1 && !still) {
+  if (false && h1 && !still) {                                     // word-by-word reveal switched off: the headline is readable at once
     var words = h1.textContent.trim().split(/\s+/), i = 0;
     h1.setAttribute('aria-label', h1.textContent.trim());
     h1.innerHTML = words.map(function (w) { return '<span class="w" aria-hidden="true" style="--i:' + (i++) + '"><span>' + w.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span></span>'; }).join(' ');
@@ -67,7 +70,7 @@
     F = stack ? Math.min(sw * 1.5, sh * 1.8) : Math.min(W * 0.62, H * 1.25);
     var ws = Math.round(F * 0.74 * (stack ? 1.0 : 1.18)); wf.style.width = wf.style.height = ws + 'px'; wf.style.left = Math.round(scx) + 'px'; wf.style.top = Math.round(scy) + 'px';
     hh = header ? header.offsetHeight : 69;
-    pin = !still && innerWidth > 860 && innerHeight >= 620;
+    pin = false;                                                  // the hero scrolls like the rest of the page; nothing holds the reader back
     de.classList.toggle('hp-on', pin);
     de.style.setProperty('--hh', hh + 'px');
     hero.style.height = ''; hero.style.height = pin ? (stick.offsetHeight + Math.round(innerHeight * 0.9)) + 'px' : '';
@@ -109,7 +112,6 @@
       var dz = D + z2; if (dz < 0.5) { q.f = 0; continue; }
       var f = F * 0.74 * zoomIn / dz, sx = cx + x1 * f, sy = cy + y1 * f;
       var dx = sx - px, dy = sy - py, dd = Math.hypot(dx, dy), push = 0, near = 0;
-      if (dd < 150) { near = 1 - dd / 150; push = near * near * 26 / (dd + 1); sx += dx * push; sy += dy * push; }
       var al = clamp(u * 1.4) * smooth(0.6, 1.6, dz) * (0.12 + 0.88 * ep + 0.88 * (1 - ep) * smooth(0.42 * (1 - ep), 0.6 * (1 - ep) + 0.02, sx / W));
       if (stack) al *= 1 - smooth(textTop - 30, textTop, sy);   // never draw lattice over the copy
       if (al < 0.02) { q.f = 0; continue; }

@@ -1405,3 +1405,12 @@ section.s#topics{background:#12285C;border-bottom-color:#12285C;color:#fff}
 #topics .tlist{border-top-color:rgba(255,255,255,.55)}
 #topics .tlist li,#topics .tlist li:hover{color:#fff;border-bottom-color:rgba(255,255,255,.14)}
 #topics .tlist li:hover{color:var(--amber-lt)}
+
+/* Restraint: no text glow, no frosted glass, no pulsing dots, no shine sweeps, no scroll cue */
+.hero h1,.hero .theme,.hero p,.hero .label{text-shadow:none!important}
+.top{background:#F8F7F4!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.seats b{animation:none!important;box-shadow:none!important}
+.lk-sheen,.hscroll{display:none!important}
+.hero .hcopy>*,.lockup image,.lk-main,.hero .wrap>div>*{animation-duration:.6s!important;animation-delay:0s!important}
+html.cta-here .top nav a.pill[href$="/register"]{opacity:0;pointer-events:none;visibility:hidden}
+.top nav a.pill[href$="/register"]{transition:opacity .2s,visibility .2s}

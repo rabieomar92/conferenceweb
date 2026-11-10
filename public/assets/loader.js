@@ -1,9 +1,9 @@
-/* Full-page loading animation: first paint, form submits and internal navigation. */
+/* Loading cover for slow form submits and navigation only: never on first paint, and only once a wait passes 0.5 s. */
 (function () {
   var d = document, root = d.documentElement, el;
   try {
     el = d.createElement('div');
-    el.id = 'qh-load'; el.className = 'show'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+    el.id = 'qh-load'; el.className = ''; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
     // a hexagonal unit cell: six gold atoms light up in turn around the central one
     var at = '', i, ang;
     for (i = 0; i < 6; i++) { ang = Math.PI / 3 * i - Math.PI / 2; at += '<circle class="la" style="animation-delay:' + (i * 0.18).toFixed(2) + 's" cx="' + (40 + 26 * Math.cos(ang)).toFixed(1) + '" cy="' + (40 + 26 * Math.sin(ang)).toFixed(1) + '" r="5"/>'; }
@@ -11,17 +11,17 @@
       '<div class="qh-word"><span class="lg" aria-hidden="true"><span class="lg-1">ICSSST<i>2027</i></span></span></div><div class="qh-msg" id="qh-msg">Loading</div>';
     root.appendChild(el);
   } catch (e) { return; }
-  var timer;
+  var timer, wait;
   function show(msg) {
-    clearTimeout(timer);
-    var m = d.getElementById('qh-msg'); if (m && msg) m.textContent = msg;
-    el.className = 'show';
-    timer = setTimeout(hide, 45000);              // failsafe: never trap the visitor
+    clearTimeout(timer); clearTimeout(wait);
+    wait = setTimeout(function () {                // quick responses never flash a cover over the page
+      var m = d.getElementById('qh-msg'); if (m && msg) m.textContent = msg;
+      el.className = 'show';
+      timer = setTimeout(hide, 45000);            // failsafe: never trap the visitor
+    }, 500);
   }
-  function hide() { clearTimeout(timer); el.className = 'hide'; }
-  var failsafe = setTimeout(hide, 8000);
-  window.addEventListener('load', function () { clearTimeout(failsafe); setTimeout(hide, 250); });
-  window.addEventListener('pageshow', function (e) { if (e.persisted) hide(); });   // back/forward cache
+  function hide() { clearTimeout(timer); clearTimeout(wait); if (el.className === 'show') el.className = 'hide'; }
+  window.addEventListener('pageshow', hide);   // back/forward cache
   d.addEventListener('submit', function (e) {
     var f = e.target; if (e.defaultPrevented || !f || f.hasAttribute('data-noload')) return;
     var a = (f.getAttribute('action') || '');
