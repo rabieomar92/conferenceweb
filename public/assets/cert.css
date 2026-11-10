@@ -1,15 +1,33 @@
-.cw{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 68px)}
-.side{border-right:1px solid var(--rule);background:#fff;padding:24px 0;overflow:auto;max-height:calc(100vh - 68px);position:sticky;top:68px}
-.side .it{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid #EFEBE3;padding:13px 24px;font:500 14.5px 'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;color:var(--navy);cursor:pointer}
-.side .it small{display:block;color:var(--muted);font-weight:400;font-size:12px}
-.side .it.on{background:var(--paper-mid);box-shadow:inset 3px 0 var(--amber)}
-.main{padding:34px 40px}
-.tb{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:24px}
-.b2{background:#fff;color:var(--navy);border:1px solid var(--navy);padding:13px 22px;font:700 11px 'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;text-decoration:none}
-.b2.pri{background:var(--navy);color:#fff}.b2:disabled{opacity:.4}
-#prev{width:100%;max-width:1000px;border:1px solid var(--rule);box-shadow:0 24px 60px rgba(13,11,46,.14);background:#fff;display:block}
-#st{color:var(--muted);font-size:14px}
-.hint{max-width:1000px;color:var(--muted);font-size:13.5px;margin:-6px 0 18px}
-.side .it.more{text-align:center;color:var(--amber);font-weight:700}
-.b2.dng{border-color:#B91C1C;color:#B91C1C}
-@media(max-width:900px){.cw{grid-template-columns:1fr}.side{position:static;max-height:240px}.main{padding:22px}}
+.ch{padding-top:30px;padding-bottom:90px}
+.ch-hd{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin:0 0 22px}
+.ch-hd h1{font-family:'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;font-size:40px;line-height:1.1;letter-spacing:-.02em;color:var(--navy);margin:6px 0 6px}
+.ch-sub{margin:0;color:var(--muted);font-size:16px}
+.ch-act{display:flex;gap:10px;flex-wrap:wrap}.ch-act .b2{min-height:48px;padding:0 22px}.ch-act .b2[hidden]{display:none}
+.cw{display:grid;grid-template-columns:290px minmax(0,1fr);gap:28px;align-items:start}
+.cw.one{grid-template-columns:minmax(0,1fr)}
+.side{position:sticky;top:84px;background:#EFECE4;border-radius:2px;padding:6px;display:flex;flex-direction:column;max-height:calc(100vh - 110px)}
+.sd-hd{padding:6px 6px 10px}.sd-hd input{width:100%;box-sizing:border-box;border:1px solid transparent;background:#fff;border-radius:2px;padding:11px 12px;font:inherit;font-size:15px;color:var(--navy);outline:none}.sd-hd input:focus{border-color:var(--navy)}
+.sd-hd span{display:block;font-size:12.5px;color:var(--muted);margin:8px 2px 0}
+.sd-list{overflow-y:auto;display:flex;flex-direction:column;gap:2px;min-height:0;overscroll-behavior:contain}
+.side .it{display:block;width:100%;text-align:left;background:none;border:0;border-radius:2px;padding:11px 14px;font:600 15px 'TeX Gyre Pagella','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;color:var(--navy);cursor:pointer;transition:background .15s}
+.side .it small{display:block;color:var(--muted);font-weight:400;font-size:12.5px;margin-top:1px}
+.side .it:hover{background:rgba(255,255,255,.6)}
+.side .it.on{background:#fff;box-shadow:0 1px 2px rgba(18,40,92,.08),0 4px 14px -6px rgba(18,40,92,.22)}
+.side .it[hidden]{display:none}
+.side .it.more{text-align:center;color:var(--navy);background:#E2DED3;margin-top:6px;font-size:14px}.side .it.more:hover{background:var(--navy);color:#fff}
+.stage{min-width:0}
+.pv-hd{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin:14px 0 0}
+.pv-hd b{font-size:19px;color:var(--navy)}.pv-hd small{display:block;color:var(--muted);font-size:13.5px;margin-top:2px}
+#st{color:var(--muted);font-size:14px;text-align:right}
+.pv-frame{background:#E9E6DE;border-radius:2px;padding:clamp(12px,2vw,24px)}
+#prev{width:auto;max-width:100%;max-height:max(340px,calc(100vh - 360px));min-height:200px;margin:0 auto;display:block;background:#fff;box-shadow:0 1px 2px rgba(13,11,46,.08),0 24px 50px -18px rgba(13,11,46,.35);transition:opacity .2s;aspect-ratio:297/210;object-fit:contain}
+#prev.busy{opacity:.45}
+
+.hint{color:var(--muted);font-size:14px;margin:16px 0 0;max-width:820px}
+.ch-pick{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 0 22px}
+.pk{display:flex;flex-direction:column;gap:4px;padding:24px 24px 22px;background:#fff;border:1px solid var(--rule);border-radius:2px;text-decoration:none;color:var(--navy);transition:background .15s,border-color .15s,transform .15s}
+.pk b{font-family:'TeX Gyre Pagella','Palatino Linotype',Palatino,Georgia,serif;font-size:38px;line-height:1}.pk span{font-size:17px;font-weight:700}.pk small{color:var(--muted);font-size:13.5px}
+.pk:hover{border-color:var(--navy);transform:translateY(-1px)}
+.pk.zero{pointer-events:none;opacity:.55}.pk.pri{background:var(--navy);border-color:var(--navy);color:#fff}.pk.pri small{color:rgba(255,255,255,.72)}.pk.pri:hover{background:var(--navy-mid,#1E3A7B)}
+.ch-note{color:var(--muted);max-width:760px;font-size:15px}
+@media(max-width:900px){#prev{max-height:none;width:100%}.cw{grid-template-columns:1fr}.side{position:static;max-height:300px}.ch-pick{grid-template-columns:1fr}.ch-hd h1{font-size:32px}.ch-act{width:100%}.ch-act .b2{flex:1}}

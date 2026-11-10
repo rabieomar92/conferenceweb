@@ -111,13 +111,20 @@ async function fetchRows(extra){
 function addItems(rows){
   rows.forEach(p=>{const i=P.length;P.push(p);const b=document.createElement('button');b.className='it';
     b.innerHTML=esc(p.full_name)+'<small>'+esc(p.ref)+'</small>';b.onclick=()=>show(i);listEl.insertBefore(b,more)});
-  more.hidden=P.length>=total; more.textContent='Load more… ('+P.length.toLocaleString('en-US')+' of '+total.toLocaleString('en-US')+')';
+  more.hidden=P.length>=total; more.textContent='Load the next '+Math.min(PAGE,total-P.length).toLocaleString('en-US');
+  const cnt=document.getElementById('cnt'); if(cnt) cnt.textContent=P.length>=total?total.toLocaleString('en-US')+' people':P.length.toLocaleString('en-US')+' of '+total.toLocaleString('en-US')+' loaded';
+  filter();
 }
+const find=document.getElementById('find');
+function filter(){ if(!find) return; const q=find.value.trim().toLowerCase();
+  [...listEl.querySelectorAll('.it:not(.more)')].forEach((b,k)=>{const p=P[k];b.hidden=!!q&&!(p.full_name+' '+p.ref+' '+(p.organisation||'')).toLowerCase().includes(q)});}
+if(find) find.addEventListener('input',filter);
 more.onclick=async()=>{more.disabled=true;try{addItems(await fetchRows('limit='+PAGE+'&offset='+P.length))}catch(e){st.textContent=e.message}more.disabled=false};
 listEl.appendChild(more);
 async function show(i){
   cur=i; [...listEl.querySelectorAll('.it:not(.more)')].forEach((b,k)=>b.classList.toggle('on',k===i));
-  st.textContent='Rendering…'; const c=await render(P[i]); prev.src=c.toDataURL('image/jpeg',.9); st.textContent='';
+  const nm=document.getElementById('pvName'),rf=document.getElementById('pvRef'); if(nm){nm.textContent=P[i].full_name;rf.textContent=P[i].ref+(P[i].organisation?' · '+P[i].organisation:'')}
+  st.textContent='Rendering…'; prev.classList.add('busy'); const c=await render(P[i]); prev.src=c.toDataURL('image/jpeg',.9); prev.classList.remove('busy'); st.textContent='';
 }
 document.getElementById('one').onclick=async()=>{
   st.textContent='Preparing PDF…'; const p=P[cur]; const c=await render(p); pdfOf(c).save(fname(p)); await issue([p.id]); st.textContent='Downloaded.';};

@@ -1146,7 +1146,10 @@ router.get('/admin/certificates', requireAdmin, (req, res) => {
   const { where, p, src } = certSource(req.query);
   const hasFilter = !!(req.query.ids || req.query.scope || req.query.q || req.query.status || req.query.cat);
   const total = hasFilter ? db.prepare(`SELECT COUNT(*) c FROM registrations ${where}`).get(...p).c : 0;
-  html(res, adminViews.certificates({ total, src, csrf: csrfToken(req) }));
+  const st = String(req.query.status || req.query.scope || '');
+  const label = req.query.ids ? 'Participants you selected' : ({ pending: 'Attended, no certificate yet', attended: 'Everyone who attended', issued: 'Certificates already issued', all: 'All participants' }[st] || 'Participants matching your filter') + (req.query.q ? ` · “${String(req.query.q).slice(0, 60)}”` : '');
+  const counts = total ? {} : db.prepare("SELECT SUM(attended=1 AND cert_issued_at IS NULL) pending, SUM(attended=1) attended, SUM(cert_issued_at IS NOT NULL) issued FROM registrations WHERE cancelled_at IS NULL").get();
+  html(res, adminViews.certificates({ total, src, csrf: csrfToken(req), label, counts }));
 });
 router.get('/admin/certificates.json', requireAdmin, (req, res) => {
   const { where, p } = certSource(req.query);
