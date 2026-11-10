@@ -1120,6 +1120,7 @@ router.post('/admin/action', requireAdmin, (req, res) => {
   else if (act === 'unpaid') { run({ pre: "UPDATE registrations SET pay_status='unpaid', paid_at=NULL, pay_source=NULL" }, []); flash(req, 'Payment status set back to unpaid.'); }
   else if (act === 'waived') { run({ pre: "UPDATE registrations SET pay_status='waived', paid_at=NULL, pay_source='manual', pay_note=COALESCE(pay_note,'waived by organiser')" }, []); flash(req, 'Marked as not requiring payment.'); }
   else if (act === 'attended') run({ pre: "UPDATE registrations SET attended=1, checkin_at=COALESCE(checkin_at, datetime('now')), checkin_by=COALESCE(checkin_by,'organiser (marked)')" }, []);
+  else if (act === 'refunded') { run({ pre: "UPDATE registrations SET pay_status='unpaid', paid_at=NULL, pay_note='fee refunded (Ticket2U)'" }, []); flash(req, 'Marked as refunded. The payment record now shows the refund.'); }
   else if (act === 'reinstate') { run({ pre: 'UPDATE registrations SET cancelled_at=NULL' }, []); flash(req, 'Registration reinstated.'); }
   else if (act === 'cancel') { run({ pre: "UPDATE registrations SET cancelled_at=COALESCE(cancelled_at, datetime('now')), cancel_reason=COALESCE(cancel_reason,'Cancelled by the organisers')" }, []); flash(req, 'Registration cancelled (seat released). No email was sent.'); }
   else if (act === 'unattended') run({ pre: 'UPDATE registrations SET attended=0' }, []);
