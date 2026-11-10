@@ -1335,3 +1335,6 @@ html:has(dialog[open]){overflow:hidden}
 @media(max-width:640px){.admtabs .wrap{margin:0 12px;padding:4px!important}.admtabs a{padding:9px 11px!important}}
 .au-opt:has(input:checked){box-shadow:none!important;background:#F4F6FB;border-color:var(--navy)}
 @media(max-width:430px){.itabs .tl{font-size:10.5px;letter-spacing:0}.itabs button{padding:9px 1px 8px}}
+/* tabs: nearly square corners (2px container, 2px tab) */
+.dtabs2.itabs,.dtabs,.admtabs .wrap{border-radius:2px!important}
+.itabs button,.dtabs button,.admtabs a{border-radius:2px!important}
