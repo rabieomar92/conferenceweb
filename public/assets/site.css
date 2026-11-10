@@ -1396,3 +1396,4 @@ dialog.au-dlg .au-f{display:flex;flex-direction:column;min-height:0;flex:1 1 aut
 .pb .wh.tbc,.room .rn.tbc{color:var(--muted)!important;font-style:italic}
 .pb.plenary .wh.tbc,.pb.gala .wh.tbc{color:rgba(255,255,255,.55)!important}
 .slotc .hint{margin:12px 0 0;font-size:14.5px;color:var(--ink-2)}
+.prog-soon{font-size:19px;color:var(--ink-2);background:#fff;border:1px solid var(--rule);border-radius:2px;padding:28px 30px;margin:0}

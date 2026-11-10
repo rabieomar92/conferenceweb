@@ -1191,6 +1191,15 @@ router.post('/admin/programme/save', requireAdmin, (req, res) => {
   flash(req, `Saved ${who}.${v.slot_ok ? ' It is on the website programme.' : v.slot_date ? ' It is not on the website yet.' : ''}${note}`, c ? [`Room clash: ${SCH.venueName(v.slot_venue)} already has ${c.type === 'item' ? c.title : c.who} at ${c.slot_start}${c.slot_end ? '–' + c.slot_end : ''}.`] : []);
   progBack(res, v);
 });
+router.post('/admin/programme/import', requireAdmin, (req, res) => {
+  if (csrfOk(req)) { const n = SCH.importSample(); flash(req, `${n} items copied from the sample programme as drafts. Check them, change what you need, then show each day on the website.`); }
+  res.redirect(cfg.base + '/admin/programme#d0');
+});
+router.post('/admin/programme/publish', requireAdmin, (req, res) => {
+  const b = req.body || {}, i = (cfg.eventDays || []).indexOf(b.day);
+  if (csrfOk(req) && i >= 0) { const n = SCH.publishDay(b.day, b.on === '1'); flash(req, b.on === '1' ? `Day ${i + 1} is on the website (${n} entries).` : `Day ${i + 1} is hidden from the website.`); }
+  res.redirect(cfg.base + '/admin/programme' + (i >= 0 ? '#d' + i : ''));
+});
 router.post('/admin/programme/item-delete', requireAdmin, (req, res) => {
   if (csrfOk(req)) { db.prepare('DELETE FROM prog_items WHERE id=?').run(parseInt((req.body || {}).id, 10) || 0); flash(req, 'Item deleted.'); }
   progBack(res);
