@@ -1,5 +1,5 @@
-/* Hero: a solid-atom crystal in real perspective.
-   - Atoms (gold and navy spheres, navy bonds) assemble out of a scattered cloud when the page opens.
+/* Hero: a solid-atom crystal in real perspective (the same 5×5×5 crystal as the poster).
+   - Atoms (flat navy tints by depth, with bonds) assemble out of a scattered cloud when the page opens.
    - The crystal turns slowly, tilts toward the pointer, and the pointer pushes atoms aside.
    - Scrolling flies the camera into the crystal while the hero stays pinned; the headline, logo and sun move at their own depths (CSS variable --p); only the crystal follows the pointer.
    Draws only while the hero is on screen. Reduced motion: one still frame, no pinning. Home page only. */
@@ -8,6 +8,10 @@
   if (!hero || !stick || !window.HTMLCanvasElement) return;
   var cv = document.createElement('canvas'); cv.className = 'lattice'; cv.setAttribute('aria-hidden', 'true');
   stick.insertBefore(cv, stick.firstChild);
+  // a faint silicon wafer behind the crystal (static image; fades and grows a little as you scroll)
+  var me = document.querySelector('script[src*="lattice.js"]'), wf = document.createElement('img');
+  wf.src = (me ? me.src.replace(/lattice\.js.*$/, '') : '/assets/') + 'wafer.svg'; wf.alt = ''; wf.className = 'wafer'; wf.setAttribute('aria-hidden', 'true'); wf.decoding = 'async';
+  stick.insertBefore(wf, cv);
   var g = cv.getContext('2d'); if (!g) return;
   var still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   var de = document.documentElement, header = document.querySelector('header.top');
@@ -20,32 +24,30 @@
     h1.innerHTML = words.map(function (w) { return '<span class="w" aria-hidden="true" style="--i:' + (i++) + '"><span>' + w.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span></span>'; }).join(' ');
   }
 
-  // ── atom tints, computed once ──
-  // one colour, navy #16295E, as solid tints over paper #FBFAF7 (the second set is unused)
-  var TN = 7, TB = [], TINT = [];
-  function mix(c, m) { return 'rgb(' + Math.round(251 + (c[0] - 251) * m) + ',' + Math.round(250 + (c[1] - 250) * m) + ',' + Math.round(247 + (c[2] - 247) * m) + ')'; }
-  [[22, 41, 94], [22, 41, 94]].forEach(function (c) {
-    for (var k0 = 0; k0 < TN; k0++) { TB.push([]); TINT.push(mix(c, 0.14 + 0.86 * Math.pow((k0 + 1) / TN, 1.2))); }
-  });
+  // ── tints, computed once: one colour, navy #12285C, as solid tints over paper #F8F7F4 (same look as the poster) ──
+  var TQ = 32, TINT = [];
+  for (var k0 = 0; k0 <= TQ; k0++) { var m0 = k0 / TQ; TINT.push('rgb(' + Math.round(248 + (18 - 248) * m0) + ',' + Math.round(247 + (40 - 247) * m0) + ',' + Math.round(244 + (92 - 244) * m0) + ')'); }
+  function tint(m) { return TINT[m <= 0 ? 0 : m >= 1 ? TQ : Math.round(m * TQ)]; }
 
-  // ── the crystal (simple cubic grid, one colour) ──
-  var small = innerWidth < 760, NX = small ? 6 : 9, NY = small ? 5 : 7, NZ = small ? 5 : 7;
+  // ── the crystal: a 5×5×5 simple cubic grid with its bonds ──
+  var NX = 5, NY = 5, NZ = 5;
   var A = [], B = [], idx = {};
   (function () {
     var maxd = Math.hypot(NX, NY, NZ) / 2, seed = 7;
     function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
     for (var x = 0; x < NX; x++) for (var y = 0; y < NY; y++) for (var z = 0; z < NZ; z++) {
-      var hx = x - (NX - 1) / 2, hy = y - (NY - 1) / 2, hz = z - (NZ - 1) / 2, th = rnd() * 6.2832, ph = Math.acos(2 * rnd() - 1), rr = 5 + rnd() * 6;
-      idx[x + ',' + y + ',' + z] = A.push({ x: hx, y: hy, z: hz, g: (x + y + z) % 2 === 0, sx: Math.sin(ph) * Math.cos(th) * rr, sy: Math.sin(ph) * Math.sin(th) * rr, sz: Math.abs(Math.cos(ph)) * rr + 2, d: Math.hypot(hx, hy, hz) / maxd * .8 + rnd() * .35 }) - 1;
+      var hx = x - (NX - 1) / 2, hy = y - (NY - 1) / 2, hz = z - (NZ - 1) / 2, th = rnd() * 6.2832, ph = Math.acos(2 * rnd() - 1), rr = 3 + rnd() * 3.5;
+      idx[x + ',' + y + ',' + z] = A.push({ x: hx, y: hy, z: hz, sx: Math.sin(ph) * Math.cos(th) * rr, sy: Math.sin(ph) * Math.sin(th) * rr, sz: Math.abs(Math.cos(ph)) * rr + 1, d: Math.hypot(hx, hy, hz) / maxd * .8 + rnd() * .35 }) - 1;
     }
     for (var k in idx) { var q = k.split(',').map(Number), a = idx[k]; [[1, 0, 0], [0, 1, 0], [0, 0, 1]].forEach(function (d) { var n = idx[(q[0] + d[0]) + ',' + (q[1] + d[1]) + ',' + (q[2] + d[2])]; if (n !== undefined) B.push([a, n]); }); }
   })();
+  var DL = [];                                                     // this frame's bonds and atoms, drawn back to front
 
   var W = 0, H = 0, dpr = 1, F = 600, raf = 0, on = true, t0 = performance.now();
   var mx = 0, my = 0, tx = 0, ty = 0, px = -1e4, py = -1e4, p = 0, pin = false, runway = 1, y0 = 0, hh = 69;
-  var fdt = 16.7, lastDraw = 0, lp = '', lx = '', ly = '', lsx = '', lsy = '', lastT = 0, vis = [], band = [[], [], []];
+  var fdt = 16.7, lp = '', lastT = 0, vis = [];
   var P = new Array(A.length);
-  for (var n0 = 0; n0 < A.length; n0++) P[n0] = { x: 0, y: 0, f: 0, z: 0, r: 0, a: 0, g: A[n0].g, i: n0 };
+  for (var n0 = 0; n0 < A.length; n0++) P[n0] = { x: 0, y: 0, f: 0, z: 0, r: 0, a: 0, fp: 0, i: n0, k: 1, o: null };
 
   function ease(t) { return t < 0 ? 0 : t > 1 ? 1 : 1 - Math.pow(1 - t, 4); }
   function clamp(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
@@ -63,6 +65,7 @@
     if (sr && sr.width) { sw = sr.width; sh = sr.height; scx = sr.left - r.left + sw / 2; scy = sr.top - r.top + sh / 2; if (stack) textTop = sr.bottom - r.top + 6; }
     else { sw = W * 0.5; sh = H * 0.8; scx = W * 0.7; scy = H * 0.5; }
     F = stack ? Math.min(sw * 1.5, sh * 1.8) : Math.min(W * 0.62, H * 1.25);
+    var ws = Math.round(F * 0.74 * (stack ? 1.0 : 1.18)); wf.style.width = wf.style.height = ws + 'px'; wf.style.left = Math.round(scx) + 'px'; wf.style.top = Math.round(scy) + 'px';
     hh = header ? header.offsetHeight : 69;
     pin = !still && innerWidth > 860 && innerHeight >= 620;
     de.classList.toggle('hp-on', pin);
@@ -92,50 +95,42 @@
 
     g.clearRect(0, 0, W, H);
 
-    var ep = p * p * (3 - 2 * p), D = 17 - 14.6 * ep;               // camera distance: flies into the crystal as you scroll
-    var th = t * 0.09 + mx * 0.25 + ep * 1.5, ph = -0.34 + my * 0.12 + ep * 0.35;
+    var ep = p * p * (3 - 2 * p), D = 7.6 - 6.2 * ep;                 // camera distance: flies into the crystal as you scroll
+    var th = 0.62 + t * 0.09 + mx * 0.25 + ep * 1.5, ph = -0.52 + my * 0.12 + ep * 0.35;
     var cth = Math.cos(th), sth = Math.sin(th), cph = Math.cos(ph), sph = Math.sin(ph);
-    var cx0 = scx, cx = cx0, cy = scy;
-    var zoomIn = 1 + ep * 0.2, wave = t * 1.1, maskA = 0.56 * (1 - ep), maskB = 0.2 * (1 - ep);
-    var i, a, q; vis.length = 0;
+    var cx = scx, cy = scy;
+    var zoomIn = 1 + ep * 0.2, wave = t * 1.1;
+    var i, a, q, zmin = 1e9, zmax = -1e9; vis.length = 0;
     for (i = 0; i < A.length; i++) {
       a = A[i]; q = P[i];
       var u = still ? 1 : ease((t - 0.2 - a.d) / 1.5), s = 1 - u;
-      var X = a.x + a.sx * s, Y = a.y + a.sy * s + Math.sin(wave + a.x * .55 + a.z * .4) * .07 * u, Z = a.z + a.sz * s;
+      var X = a.x + a.sx * s, Y = a.y + a.sy * s + Math.sin(wave + a.x * .55 + a.z * .4) * .05 * u, Z = a.z + a.sz * s;
       var x1 = X * cth + Z * sth, z1 = -X * sth + Z * cth, y1 = Y * cph - z1 * sph, z2 = Y * sph + z1 * cph;
-      var dz = D + z2; if (dz < 0.7) { q.f = 0; continue; }
-      var f = F * zoomIn / dz, sx = cx + x1 * f, sy = cy + y1 * f;
+      var dz = D + z2; if (dz < 0.5) { q.f = 0; continue; }
+      var f = F * 0.74 * zoomIn / dz, sx = cx + x1 * f, sy = cy + y1 * f;
       var dx = sx - px, dy = sy - py, dd = Math.hypot(dx, dy), push = 0, near = 0;
       if (dd < 150) { near = 1 - dd / 150; push = near * near * 26 / (dd + 1); sx += dx * push; sy += dy * push; }
-      var al = clamp(u * 1.4) * smooth(2.2, 4.2, dz) * (1 - smooth(20, 34, dz)) * (0.12 + 0.88 * ep + 0.88 * (1 - ep) * smooth(0.42 * (1 - ep), 0.6 * (1 - ep) + 0.02, sx / W));
+      var al = clamp(u * 1.4) * smooth(0.6, 1.6, dz) * (0.12 + 0.88 * ep + 0.88 * (1 - ep) * smooth(0.42 * (1 - ep), 0.6 * (1 - ep) + 0.02, sx / W));
       if (stack) al *= 1 - smooth(textTop - 30, textTop, sy);   // never draw lattice over the copy
-      if (al < (lite ? 0.07 : 0.01)) { q.f = 0; continue; }
-      q.f = 1; q.u = u; q.x = sx; q.y = sy; q.z = dz; q.r = Math.min(30, Math.max(1.1, 0.17 * f * (1 + near * 0.6))); q.a = al; q.n = near; vis.push(q);
+      if (al < 0.02) { q.f = 0; continue; }
+      q.f = 1; q.u = u; q.x = sx; q.y = sy; q.z = dz; q.fp = f; q.r = Math.min(60, Math.max(1.2, 0.122 * f * (1 + near * 0.5))); q.a = al; vis.push(q);
+      if (dz < zmin) zmin = dz; if (dz > zmax) zmax = dz;
     }
-    // bonds, in three depth bands (one stroke each)
-    g.lineWidth = 1; g.lineCap = 'butt';
-    band[0].length = band[1].length = band[2].length = 0;
-    for (i = 0; i < B.length; i += (lite ? 1 : 1)) {
+    var zr = Math.max(0.001, zmax - zmin);
+    // one list of bonds and atoms, far to near, so nearer atoms sit over the bonds behind them (as in the poster)
+    DL.length = 0;
+    for (i = 0; i < vis.length; i++) { q = vis[i]; if (q.x < -q.r || q.x > W + q.r || q.y < -q.r || q.y > H + q.r) continue; q.k = 0; q.o = q; DL.push(q); }
+    for (i = 0; i < B.length; i++) {
       var p1 = P[B[i][0]], p2 = P[B[i][1]]; if (!p1.f || !p2.f || p1.u < 0.96 || p2.u < 0.96) continue;
-      var zz = (p1.z + p2.z) / 2; if (zz > 15 || (lite && zz > 9)) continue; band[zz > 15 ? 0 : zz > 9 ? 1 : 2].push(p1, p2);
+      var bz = (p1.z + p2.z) / 2; if (lite > 1 && (bz - zmin) / zr > 0.7) continue;
+      var bo = B[i].o || (B[i].o = { k: 1 }); bo.z = bz + 0.02; bo.p1 = p1; bo.p2 = p2; DL.push(bo);
     }
-    for (var bi = 0; bi < 3; bi++) {
-      g.strokeStyle = 'rgba(22,41,94,' + [0.09, 0.15, 0.24][bi] * (bi === 2 ? 1 - ep * 0.4 : 1) + ')'; g.beginPath();
-      for (var k = 0; k < band[bi].length; k += 2) { var m1 = band[bi][k], m2 = band[bi][k + 1]; g.moveTo(m1.x, m1.y); g.lineTo(m2.x, m2.y); }
-      g.stroke();
-    }
-    // flat, opaque, one hue: each atom is filled with a solid tint (paper → navy by depth and fade), one path per tint
-    for (k = 0; k < 2 * TN; k++) TB[k].length = 0;
-    for (i = 0; i < vis.length; i++) {
-      q = vis[i]; var tone = q.a * (0.5 + 0.5 * smooth(2, 12, 24 - q.z));
-      if (q.x < -q.r || q.x > W + q.r || q.y < -q.r || q.y > H + q.r) continue;
-      TB[Math.min(TN - 1, Math.floor(tone * TN))].push(q);
-    }
-    for (k = 0; k < 2 * TN; k++) {                                    // faint to strong, navy and gold interleaved
-      var kk = (k >> 1) + (k & 1) * TN, bk = TB[kk]; if (!bk.length) continue;
-      g.fillStyle = TINT[kk]; g.beginPath();
-      for (i = 0; i < bk.length; i++) { q = bk[i]; g.moveTo(q.x + q.r, q.y); g.arc(q.x, q.y, q.r, 0, 6.2832); }
-      g.fill();
+    DL.sort(function (m, n) { return n.z - m.z; });
+    g.lineCap = 'round';
+    for (i = 0; i < DL.length; i++) {
+      var it = DL[i], dn = (it.z - zmin) / zr;
+      if (it.k) { var b1 = it.p1, b2 = it.p2; g.strokeStyle = tint((1 - (0.55 + 0.35 * dn)) * Math.min(b1.a, b2.a)); g.lineWidth = Math.max(0.7, 0.027 * (b1.fp + b2.fp) / 2); g.beginPath(); g.moveTo(b1.x, b1.y); g.lineTo(b2.x, b2.y); g.stroke(); }
+      else { g.fillStyle = tint((1 - (0.08 + 0.72 * dn)) * it.a); g.beginPath(); g.arc(it.x, it.y, it.r, 0, 6.2832); g.fill(); }
     }
     // quality governor: if this device spends too long drawing, shed detail (the intro itself stays as designed)
     var slow = fdt > budget * 1.5 + 4;                                // judged by real frame gaps, so drawing cost on the GPU counts too

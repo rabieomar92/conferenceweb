@@ -1397,3 +1397,6 @@ dialog.au-dlg .au-f{display:flex;flex-direction:column;min-height:0;flex:1 1 aut
 .pb.plenary .wh.tbc,.pb.gala .wh.tbc{color:rgba(255,255,255,.55)!important}
 .slotc .hint{margin:12px 0 0;font-size:14.5px;color:var(--ink-2)}
 .prog-soon{font-size:19px;color:var(--ink-2);background:#fff;border:1px solid var(--rule);border-radius:2px;padding:28px 30px;margin:0}
+/* faint silicon wafer behind the hero crystal */
+.hero img.wafer{position:absolute;z-index:0;pointer-events:none;transform:translate(-50%,-50%) scale(calc(1 + var(--p,0) * .45));opacity:calc(.5 - var(--p,0) * .5);max-width:none;user-select:none}
+@media(max-width:860px){.hero img.wafer{opacity:.4}}
