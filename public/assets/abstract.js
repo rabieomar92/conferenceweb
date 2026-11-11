@@ -50,5 +50,136 @@
     ab.value = ab.value.slice(0, s) + t + ab.value.slice(en); ab.focus(); ab.selectionStart = ab.selectionEnd = s + t.length; ab.dispatchEvent(new Event('input'));
   });
   document.addEventListener('tabshow', preview);
+
+  // ── sections of the abstract form as tabs (Title and authors · Abstract · Keywords · Preview) ──
+  var panes = [].slice.call(f.querySelectorAll('.apane')), tabs = [];
+  function nAuthors() { try { return (JSON.parse(au && au.value || '{}').a || []).length; } catch (e) { return 0; } }
+  function marks() {
+    if (!tabs.length) return;
+    var kwn = kw ? kw.value.split(/[;,]/).filter(function (x) { return x.trim(); }).length : 0, n = words(ab.value);
+    var ok = { t: !!(ti && ti.value.trim()) && nAuthors() > 0, a: n > 0 && (!MIN || n >= MIN) && (!MAX || n <= MAX), k: kwn >= 3 && kwn <= 6 };
+    tabs.forEach(function (b, i) { var k = panes[i].getAttribute('data-pane'); b.classList.toggle('ok', ok[k] === true); b.classList.toggle('due', ok[k] === false); });
+    return ok;
+  }
+  function pane(i, focus) {
+    panes.forEach(function (p, j) { p.hidden = i !== j; tabs[j].setAttribute('aria-selected', i === j); tabs[j].tabIndex = i === j ? 0 : -1; });
+    if (focus) tabs[i].focus();
+    if (panes[i].getAttribute('data-pane') === 'p') preview();
+  }
+  if (panes.length > 1) {
+    var bar = document.createElement('div'); bar.className = 'atabs'; bar.setAttribute('role', 'tablist'); bar.setAttribute('aria-label', T('Abstract sections'));
+    panes.forEach(function (p, i) {
+      var b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'tab'); b.id = 'atab-' + p.getAttribute('data-pane'); p.setAttribute('role', 'tabpanel'); p.setAttribute('aria-labelledby', b.id);
+      b.innerHTML = '<span class="an">' + (i + 1) + '</span><span class="at">' + esc(T(p.getAttribute('data-label'))) + '</span>';
+      b.addEventListener('click', function () { pane(i); });
+      b.addEventListener('keydown', function (ev) { var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0; if (d) { ev.preventDefault(); pane((i + d + panes.length) % panes.length, true); } });
+      bar.appendChild(b); tabs.push(b);
+    });
+    var fs = f.querySelector('.absfs') || panes[0]; fs.parentNode.insertBefore(bar, fs);
+    var nav = document.createElement('div'); nav.className = 'anav';   // "Next" step inside each section
+    panes.forEach(function (p, i) { if (i < panes.length - 1) { var nx = document.createElement('button'); nx.type = 'button'; nx.className = 'b2 anext'; nx.innerHTML = T('Next:') + ' ' + esc(T(panes[i + 1].getAttribute('data-label'))) + ' <span aria-hidden="true">→</span>'; nx.addEventListener('click', function () { pane(i + 1, true); window.scrollTo({ top: bar.getBoundingClientRect().top + window.scrollY - 110, behavior: 'smooth' }); }); var w = nav.cloneNode(); w.appendChild(nx); p.appendChild(w); } });
+    var st = marks(), first = 0; ['t', 'a', 'k'].some(function (k, i) { if (st[k] === false) { first = i; return true; } });
+    pane(first);
+  }
+
+  // ── visual equation editor (MathLive): no LaTeX knowledge needed ──
+  var OCR = f.hasAttribute('data-ocr'), CSRF = f.getAttribute('data-csrf') || '';
+  function mathlive(cb) {
+    if (window.MathfieldElement) return cb();
+    var s = document.createElement('script'); s.src = B + '/assets/mathlive/mathlive.min.js';
+    s.onload = function () { try { window.MathfieldElement.fontsDirectory = B + '/assets/mathlive/fonts'; window.MathfieldElement.soundsDirectory = null; } catch (e) { /* defaults */ } cb(); };
+    s.onerror = function () { alert(T('The equation editor could not be loaded. Please check your connection.')); };
+    document.head.appendChild(s);
+  }
+  function mathAt(pos) {   // the $…$ / $$…$$ that contains the cursor
+    var m, re = new RegExp(MATH.source, 'g');
+    while ((m = re.exec(ab.value))) { if (pos > m.index && pos < m.index + m[0].length) return { s: m.index, e: m.index + m[0].length, t: m[0] }; }
+    return null;
+  }
+  var dlg = null, mf, src, msg, target = null, sel = [0, 0];
+  function strip(t) { var d = /^\$\$|^\\\[/.test(t); return { d: d, l: t.replace(/^\$\$|\$\$$|^\\\[|\\\]$|^\\\(|\\\)$|^\$|\$$/g, '').trim() }; }
+  function build() {
+    dlg = document.createElement('dialog'); dlg.className = 'au-dlg eqdlg'; dlg.setAttribute('aria-labelledby', 'eqT');
+    dlg.innerHTML = '<form method="dialog" class="au-f" novalidate><div class="au-hd"><h3 id="eqT">' + T('Equation') + '</h3><button type="button" class="au-x" aria-label="' + T('Close') + '"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button></div>' +
+      '<div class="au-bd">' +
+      '<p class="hint eqhint">' + T('Type the equation as you would write it. Use the keyboard button for symbols. Shortcuts: / makes a fraction, ^ a power, _ a subscript; type alpha, beta, sqrt or int for the symbol.') + '</p>' +
+      '<math-field class="eqmf" aria-label="' + T('Equation') + '"></math-field>' +
+      (OCR ? '<div class="eqocr" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg><div><b>' + T('Have it as a picture?') + '</b><span>' + T('Paste a screenshot of the equation here (Ctrl+V) or') + ' <label class="eqpick">' + T('choose an image') + '<input type="file" accept="image/png,image/jpeg,image/webp" hidden></label>. ' + T('We will turn it into an equation you can edit.') + '</span><span class="eqmsg" role="status"></span></div></div>' : '') +
+      '<fieldset class="eqpos"><legend class="l">' + T('Where should it go?') + '</legend><label><input type="radio" name="eqd" value="0" checked> ' + T('Inside the sentence') + '</label><label><input type="radio" name="eqd" value="1"> ' + T('On its own line') + '</label></fieldset>' +
+      '<details class="eqsrc"><summary>' + T('LaTeX code (optional)') + '</summary><textarea rows="3" spellcheck="false" aria-label="LaTeX"></textarea></details>' +
+      '</div><div class="au-ft"><button type="button" class="b2 eqc">' + T('Cancel') + '</button><button type="button" class="b2 pri eqok">' + T('Insert equation') + '</button></div></form>';
+    document.body.appendChild(dlg);
+    mf = dlg.querySelector('math-field'); src = dlg.querySelector('.eqsrc textarea'); msg = dlg.querySelector('.eqmsg');
+    try { mf.mathVirtualKeyboardPolicy = 'auto'; mf.smartFence = true; } catch (e) { /* older engine */ }
+    mf.addEventListener('input', function () { src.value = mf.value; });
+    src.addEventListener('input', function () { mf.value = src.value; });
+    var close = function () { try { window.mathVirtualKeyboard.hide(); } catch (e) { /* none */ } dlg.close(); ab.focus(); };
+    dlg.querySelector('.au-x').addEventListener('click', close); dlg.querySelector('.eqc').addEventListener('click', close);
+    dlg.addEventListener('cancel', function () { try { window.mathVirtualKeyboard.hide(); } catch (e) { /* none */ } });
+    dlg.querySelector('.eqok').addEventListener('click', function () {
+      var l = (mf.value || '').trim(), disp = dlg.querySelector('input[name=eqd]:checked').value === '1';
+      var t = l ? (disp ? '$$' + l + '$$' : '$' + l + '$') : '';
+      var a = target ? target.s : sel[0], b = target ? target.e : sel[1];
+      if (!t && !target) return close();
+      var pre = ab.value.slice(0, a), post = ab.value.slice(b);
+      if (t && disp) { if (pre && !/\n$/.test(pre)) t = '\n' + t; if (post && !/^\n/.test(post)) t += '\n'; }
+      else if (t) { if (pre && /\S$/.test(pre)) t = ' ' + t; if (post && /^[^\s.,;:)!?]/.test(post)) t += ' '; }
+      ab.value = pre + t + post; close(); ab.selectionStart = ab.selectionEnd = a + t.length; ab.dispatchEvent(new Event('input'));
+    });
+    if (OCR) {
+      var box = dlg.querySelector('.eqocr'), fi = box.querySelector('input[type=file]');
+      var read = function (file) {
+        if (!file || !/^image\//.test(file.type)) return;
+        msg.className = 'eqmsg'; msg.textContent = T('Reading the equation…'); box.classList.add('busy');
+        var img = new Image(), u = URL.createObjectURL(file);
+        img.onload = function () {
+          var k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+          var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+          fetch(B + '/eq-ocr', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF': CSRF }, body: JSON.stringify({ image: c.toDataURL('image/png') }) })
+            .then(function (r) { return r.json(); }).then(function (j) {
+              box.classList.remove('busy');
+              if (!j.ok) { msg.className = 'eqmsg err'; msg.textContent = T(j.error || 'The equation could not be read.'); return; }
+              mf.value = j.latex; src.value = mf.value; msg.className = 'eqmsg ok'; msg.textContent = T('Done. Please check the equation above and correct anything that was misread.'); mf.focus();
+            }).catch(function () { box.classList.remove('busy'); msg.className = 'eqmsg err'; msg.textContent = T('The equation could not be read just now. Please try again.'); });
+        };
+        img.onerror = function () { box.classList.remove('busy'); msg.className = 'eqmsg err'; msg.textContent = T('Please use a PNG, JPEG or WebP image.'); };
+        img.src = u;
+      };
+      fi.addEventListener('change', function () { read(fi.files[0]); fi.value = ''; });
+      dlg.addEventListener('paste', function (ev) {
+        var it = [].slice.call((ev.clipboardData || {}).items || []).filter(function (x) { return x.kind === 'file' && /^image\//.test(x.type); })[0];
+        if (it) { ev.preventDefault(); ev.stopPropagation(); read(it.getAsFile()); }
+      }, true);
+      box.addEventListener('dragover', function (ev) { ev.preventDefault(); box.classList.add('over'); });
+      box.addEventListener('dragleave', function () { box.classList.remove('over'); });
+      box.addEventListener('drop', function (ev) { ev.preventDefault(); box.classList.remove('over'); read(ev.dataTransfer.files[0]); });
+    }
+  }
+  function openEq() {
+    if (ab.disabled || ab.readOnly) return;
+    sel = [ab.selectionStart || 0, ab.selectionEnd || 0]; target = mathAt(sel[0]);
+    mathlive(function () {
+      if (!dlg) build();
+      var x = target ? strip(target.t) : { d: false, l: '' };
+      dlg.querySelector('input[name=eqd][value="' + (x.d ? 1 : 0) + '"]').checked = true;
+      dlg.querySelector('.eqok').textContent = T(target ? 'Update equation' : 'Insert equation');
+      if (msg) { msg.textContent = ''; msg.className = 'eqmsg'; }
+      dlg.showModal(); try { window.mathVirtualKeyboard.container = dlg; } catch (e) { /* default container */ }
+      mf.value = x.l; src.value = x.l; setTimeout(function () { mf.focus(); }, 30);
+    });
+  }
+  if (ab) {
+    var tb = document.createElement('div'); tb.className = 'eqbar';
+    tb.innerHTML = '<button type="button" class="b2 eqbtn"><span class="eqi" aria-hidden="true">∑</span><span class="eql">' + T('Insert equation') + '</span></button><span class="hint">' + T('Write equations visually, no LaTeX needed') + (OCR ? ' · ' + T('or paste a picture of one') : '') + '</span>';
+    ab.parentNode.insertBefore(tb, ab);
+    var eb = tb.querySelector('.eqbtn'), el = tb.querySelector('.eql');
+    var upd = function () { el.textContent = T(mathAt(ab.selectionStart || 0) ? 'Edit this equation' : 'Insert equation'); };
+    ['keyup', 'click', 'select', 'input'].forEach(function (k) { ab.addEventListener(k, upd); });
+    eb.addEventListener('mousedown', function (ev) { ev.preventDefault(); });   // keep the caret where it is
+    eb.addEventListener('click', openEq);
+    ab.addEventListener('dblclick', function () { if (mathAt(ab.selectionStart || 0)) openEq(); });
+  }
+  [ti, ab, au, kw].forEach(function (el2) { if (el2) el2.addEventListener('input', marks); });
+  if (au) new MutationObserver(marks).observe(au, { attributes: true, attributeFilter: ['value'] });
   count(); preview();
 })();

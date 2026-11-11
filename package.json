@@ -19,6 +19,7 @@
     "helmet": "^8.3.0",
     "katex": "^0.16.22",
     "mathjax-full": "^3.2.2",
+    "mathlive": "0.105.3",
     "nodemailer": "^10.2.0",
     "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",

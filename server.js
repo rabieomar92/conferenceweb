@@ -881,6 +881,14 @@ const photoRoute = (getId) => [express.json({ limit: '4mb' }), (req, res) => {
 }];
 router.get('/speaker/abstract.pdf', (req, res) => { const sp = currentSpeaker(req); if (!sp) return res.redirect(cfg.base + '/speaker/login'); sendPdf(res, [absOfSpeaker(sp)], pdfName(null, sp.slug)); });
 router.post('/speaker/photo', ...photoRoute((req) => (currentSpeaker(req) ? req.session.spk : 0)));
+// equation OCR for the abstract editor (participants and speakers)
+router.post('/eq-ocr', express.json({ limit: '6mb' }), async (req, res) => {
+  const r = currentReg(req), sp = r ? null : currentSpeaker(req), adm = !r && !sp && isAdminReq(req);
+  if (!r && !sp && !adm) return res.status(403).json({ ok: false, error: 'Please sign in again.' });
+  if (!csrfHeader(req)) return res.status(400).json({ ok: false, error: 'Your session expired. Please reload the page.' });
+  const out = await require('./lib/eqocr').read(r ? 'r' + r.id : sp ? 's' + sp.id : 'admin', req.body && req.body.image);
+  res.json(out.error ? { ok: false, error: out.error } : { ok: true, latex: out.latex });
+});
 
 // ── speakers: admin ───────────────────────────────────────
 const admBar = (req, label) => adminViews.baseHead(`${label} — ${cfg.eventName}`, spv.ADM_CSS) + adminViews.topbar(label, `<a href="${cfg.base}/admin">Participants</a><a href="${cfg.base}/admin/speakers">Speakers</a><a href="${cfg.base}/admin/settings">Settings</a>`).replace('__CSRF__', csrfToken(req));
@@ -1462,6 +1470,7 @@ if (cfg.googleVerifyFile && /^google[a-z0-9]+\.html$/i.test(cfg.googleVerifyFile
 }
 
 app.get((cfg.base || '') + '/assets/institutions.json', inst.serve);        // gzip-compressed list (≈90 KB)
+app.use((cfg.base || '') + '/assets/mathlive', express.static(path.dirname(require.resolve('mathlive')), { maxAge: '30d', index: false }));   // visual equation editor
 app.use((cfg.base || '') + '/assets/katex', express.static(path.join(path.dirname(require.resolve('katex/package.json')), 'dist'), { maxAge: '30d', index: false }));   // equation preview
 app.use(cfg.base || '/', express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 app.use(cfg.base || '/', router);
