@@ -1597,3 +1597,24 @@ body.admb .dlrow{gap:10px}
   :root body .b2.admout{padding:8px 12px}
   body.admb .sum{flex-wrap:wrap;gap:8px}
 }
+/* settings: rarely-changed options folded away */
+body.admb details.adv{margin-top:26px;border-top:1px solid var(--rule);padding-top:4px}
+body.admb details.adv[data-only]{margin-top:8px;border-top:0;padding-top:0}
+body.admb details.adv>summary{list-style:none;display:inline-flex;align-items:center;gap:10px;cursor:pointer;padding:12px 16px;margin-top:14px;background:#EEF1F7;border-radius:2px;color:var(--navy);font-weight:700;font-size:15px;transition:background .15s,color .15s}
+body.admb details.adv>summary::-webkit-details-marker{display:none}
+body.admb details.adv>summary::before{content:"";width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .2s;margin-right:2px}
+body.admb details.adv[open]>summary::before{transform:rotate(45deg)}
+body.admb details.adv>summary span{font-weight:400;color:var(--muted)}
+body.admb details.adv>summary:hover{background:var(--navy);color:#fff}body.admb details.adv>summary:hover span{color:rgba(255,255,255,.75)}
+body.admb details.adv>.grid{margin-top:22px}
+/* fees table (settings) */
+.feet{border:1px solid var(--rule);background:#fff}
+.feet .fh,.feet .fr{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,.8fr) minmax(0,1.5fr) 40px;gap:8px;align-items:center;padding:8px 10px}
+.feet .fh{background:#F6F4EE;font-size:13px;font-weight:700;color:var(--navy);padding:10px 12px}.feet .fh i{font-weight:400;color:var(--muted)}
+.feet .fr{border-top:1px solid var(--rule)}
+.feet .fr input{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;padding:9px 10px;font:inherit;font-size:15.5px;color:var(--navy);border-radius:2px}
+.feet .fr input:hover{border-color:var(--rule)}.feet .fr input:focus{outline:0;border-color:var(--navy);background:#fff}
+.feet .fx{width:34px;height:34px;border:0;border-radius:2px;background:transparent;color:var(--muted);cursor:pointer;display:grid;place-items:center}
+.feet .fx:hover{background:#FBEAEA;color:#B91C1C}
+.feet .fadd{margin:10px}
+@media(max-width:700px){.feet .fh{display:none}.feet .fr{grid-template-columns:1fr 1fr 34px}.feet .fr input:nth-child(3){grid-column:1/3;grid-row:2}}
