@@ -1414,3 +1414,31 @@ section.s#topics{background:#12285C;border-bottom-color:#12285C;color:#fff}
 .hero .hcopy>*,.lockup image,.lk-main,.hero .wrap>div>*{animation-duration:.6s!important;animation-delay:0s!important}
 html.cta-here .top nav a.pill[href$="/register"]{opacity:0;pointer-events:none;visibility:hidden}
 .top nav a.pill[href$="/register"]{transition:opacity .2s,visibility .2s}
+/* ── dashboards: vertical section menu on the left, one page per section on the right ── */
+@media(min-width:861px){
+  .dlay{display:grid;grid-template-columns:220px minmax(0,1fr);gap:36px;align-items:start;margin-top:26px}
+  .dlay>.dtabs2.itabs{position:sticky;top:96px;display:flex!important;flex-direction:column;gap:3px;margin:0;padding:6px}
+  .dlay>.itabs button{flex:none;flex-direction:row;justify-content:flex-start;align-items:center;gap:12px;padding:12px 14px;text-align:left}
+  .dlay>.itabs .tl{font-size:16.5px;line-height:1.2}
+  .dlay>.itabs .ti,.dlay>.itabs svg{width:22px;height:22px}
+  .dlay .dbody{min-width:0}
+}
+@media(min-width:861px) and (max-width:1180px){.dlay .dgrid{grid-template-columns:1fr}}
+@media(min-width:861px){main.dash .wrap{max-width:1400px}}
+/* progress stepper turns vertical whenever its card is too narrow for seven columns */
+.dash .dcard:has(>.dsteps){container-type:inline-size}
+@container (max-width:760px){
+  .dsteps{grid-template-columns:1fr!important;gap:14px}
+  .dsteps li{padding:0 0 0 38px!important;min-height:26px}
+  .dsteps li::before{left:11px!important;right:auto!important;top:24px;bottom:-14px;width:2px;height:auto}
+  .dsteps li:last-child::before{display:none}
+  .dsteps b,.dsteps span{display:inline;overflow-wrap:normal;hyphens:manual}
+  .dsteps span{margin-left:8px;color:var(--muted)}
+}
+/* Papers: stage strip works as tabs, one stage shown at a time */
+.sflow.tabs a{cursor:pointer;transition:background .2s,color .2s}
+.sflow.tabs a:hover{background:#F4F6FB}
+.sflow.tabs li.on a{background:var(--navy);color:#fff}
+.sflow.tabs li.on small{color:rgba(255,255,255,.78)}
+.sflow.tabs li.on i{border-color:#fff;color:#fff}
+.sflow.tabs li.on.dn i{background:#fff;border-color:#fff;color:#1F7A3A}
