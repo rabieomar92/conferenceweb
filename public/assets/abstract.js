@@ -47,7 +47,7 @@
   f.addEventListener('click', function (e) {
     var b = e.target.closest('[data-ins]'); if (!b) return; e.preventDefault();
     var t = b.getAttribute('data-ins'), s = ab.selectionStart || ab.value.length, en = ab.selectionEnd || s;
-    ab.value = ab.value.slice(0, s) + t + ab.value.slice(en); ab.focus(); ab.selectionStart = ab.selectionEnd = s + t.length; ab.dispatchEvent(new Event('input'));
+    ab.value = ab.value.slice(0, s) + t + ab.value.slice(en); ab.focus(); ab.selectionStart = ab.selectionEnd = s + t.length; ab.dispatchEvent(new Event('input', { bubbles: true }));
   });
   document.addEventListener('tabshow', preview);
 
@@ -65,11 +65,12 @@
     panes.forEach(function (p, j) { p.hidden = i !== j; tabs[j].setAttribute('aria-selected', i === j); tabs[j].tabIndex = i === j ? 0 : -1; });
     if (focus) tabs[i].focus();
     if (panes[i].getAttribute('data-pane') === 'p') preview();
+    try { sessionStorage.setItem('apane:' + location.pathname, panes[i].getAttribute('data-pane')); } catch (e) { /* private mode */ }
   }
   if (panes.length > 1) {
     var bar = document.createElement('div'); bar.className = 'atabs'; bar.setAttribute('role', 'tablist'); bar.setAttribute('aria-label', T('Abstract sections'));
     panes.forEach(function (p, i) {
-      var b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'tab'); b.id = 'atab-' + p.getAttribute('data-pane'); p.setAttribute('role', 'tabpanel'); p.setAttribute('aria-labelledby', b.id);
+      var b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'tab'); b.id = 'atab-' + p.getAttribute('data-pane'); p.id = p.id || 'apane-' + p.getAttribute('data-pane'); b.setAttribute('aria-controls', p.id); p.setAttribute('role', 'tabpanel'); p.setAttribute('aria-labelledby', b.id);
       b.innerHTML = '<span class="an">' + (i + 1) + '</span><span class="at">' + esc(T(p.getAttribute('data-label'))) + '</span>';
       b.addEventListener('click', function () { pane(i); });
       b.addEventListener('keydown', function (ev) { var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0; if (d) { ev.preventDefault(); pane((i + d + panes.length) % panes.length, true); } });
@@ -78,8 +79,12 @@
     var fs = f.querySelector('.absfs') || panes[0]; fs.parentNode.insertBefore(bar, fs);
     var nav = document.createElement('div'); nav.className = 'anav';   // "Next" step inside each section
     panes.forEach(function (p, i) { if (i < panes.length - 1) { var nx = document.createElement('button'); nx.type = 'button'; nx.className = 'b2 anext'; nx.innerHTML = T('Next:') + ' ' + esc(T(panes[i + 1].getAttribute('data-label'))) + ' <span aria-hidden="true">→</span>'; nx.addEventListener('click', function () { pane(i + 1, true); window.scrollTo({ top: bar.getBoundingClientRect().top + window.scrollY - 110, behavior: 'smooth' }); }); var w = nav.cloneNode(); w.appendChild(nx); p.appendChild(w); } });
-    var st = marks(), first = 0; ['t', 'a', 'k'].some(function (k, i) { if (st[k] === false) { first = i; return true; } });
+    var st = marks(), first = 0, last = null; try { last = sessionStorage.getItem('apane:' + location.pathname); } catch (e) { /* private mode */ }
+    panes.forEach(function (p, i) { if (p.getAttribute('data-pane') === last) first = i; });
+    if (last === null) ['t', 'a', 'k'].some(function (k, i) { if (st[k] === false) { first = i; return true; } });
     pane(first);
+    var sb = f.querySelector('.sbtns .btn[type=submit]');
+    if (sb) { var sh = document.createElement('span'); sh.className = 'hint savehint'; sh.textContent = T('Saves the title, authors, abstract and keywords together.'); sb.parentNode.appendChild(sh); }
   }
 
   // ── visual equation editor (MathLive): no LaTeX knowledge needed ──
@@ -96,7 +101,8 @@
     while ((m = re.exec(el.value))) { if (pos > m.index && pos < m.index + m[0].length) return { s: m.index, e: m.index + m[0].length, t: m[0] }; }
     return null;
   }
-  var fld = ab, dlg = null, shade = null, mf, src, msg, target = null, sel = [0, 0];
+  var readImg = null, fld = ab, dlg = null, shade = null, mf, src, msg, target = null, sel = [0, 0];
+  function inert(on) { [].forEach.call(document.body.children, function (n) { if (n !== dlg && n !== shade && !/^(SCRIPT|STYLE)$/.test(n.tagName) && !/ML__/.test(n.className || '')) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); }
   function strip(t) { var d = /^\$\$|^\\\[/.test(t); return { d: d, l: t.replace(/^\$\$|\$\$$|^\\\[|\\\]$|^\\\(|\\\)$|^\$|\$$/g, '').trim() }; }
   function build() {
     dlg = document.createElement('dialog'); dlg.className = 'au-dlg eqdlg'; dlg.setAttribute('aria-labelledby', 'eqT');
@@ -115,7 +121,8 @@
     src.addEventListener('input', function () { mf.value = src.value; });
     // a non-modal dialog with our own backdrop: MathLive's suggestion list, menu and keyboard live in <body>
     // and would be hidden behind a modal dialog's top layer
-    var close = function () { try { window.mathVirtualKeyboard.hide(); } catch (e) { /* none */ } dlg.close(); shade.hidden = true; document.documentElement.classList.remove('eq-open'); fld.focus(); };
+    var close = function () { try { window.mathVirtualKeyboard.hide(); } catch (e) { /* none */ } dlg.close(); shade.hidden = true; document.documentElement.classList.remove('eq-open'); inert(false); fld.focus(); };
+    shade.addEventListener('click', function () { mf.focus(); });
     document.addEventListener('keydown', function (ev) {   // Esc closes the dialog; MathLive handles Esc itself (and stops it) while its suggestion list is open
       if (ev.key === 'Escape' && dlg.open && !ev.defaultPrevented) { ev.preventDefault(); close(); }
     });
@@ -129,11 +136,11 @@
       var pre = fld.value.slice(0, a), post = fld.value.slice(b);
       if (t && disp) { if (pre && !/\n$/.test(pre)) t = '\n' + t; if (post && !/^\n/.test(post)) t += '\n'; }
       else if (t) { if (pre && /\S$/.test(pre)) t = ' ' + t; if (post && /^[^\s.,;:)!?]/.test(post)) t += ' '; }
-      fld.value = pre + t + post; close(); fld.selectionStart = fld.selectionEnd = a + t.length; fld.dispatchEvent(new Event('input'));
+      fld.value = pre + t + post; close(); fld.selectionStart = fld.selectionEnd = a + t.length; fld.dispatchEvent(new Event('input', { bubbles: true }));
     });
     if (OCR) {
       var box = dlg.querySelector('.eqocr'), fi = box.querySelector('input[type=file]');
-      var read = function (file) {
+      var read = readImg = function (file) {
         if (!file || !/^image\//.test(file.type)) return;
         msg.className = 'eqmsg'; msg.textContent = T('Reading the equation…'); box.classList.add('busy');
         var img = new Image(), u = URL.createObjectURL(file);
@@ -160,7 +167,7 @@
       box.addEventListener('drop', function (ev) { ev.preventDefault(); box.classList.remove('over'); read(ev.dataTransfer.files[0]); });
     }
   }
-  function openEq(el) {
+  function openEq(el, img) {
     fld = el || ab; if (fld.disabled || fld.readOnly) return;
     sel = [fld.selectionStart || 0, fld.selectionEnd || 0]; target = mathAt(fld, sel[0]);
     mathlive(function () {
@@ -170,8 +177,9 @@
       dlg.querySelector('input[name=eqd][value="' + (x.d && !one ? 1 : 0) + '"]').checked = true;
       dlg.querySelector('.eqok').textContent = T(target ? 'Update equation' : 'Insert equation');
       if (msg) { msg.textContent = ''; msg.className = 'eqmsg'; }
-      shade.hidden = false; document.documentElement.classList.add('eq-open'); dlg.show();
+      shade.hidden = false; document.documentElement.classList.add('eq-open'); inert(true); dlg.show();
       mf.value = x.l; src.value = x.l; setTimeout(function () { mf.focus(); }, 30);
+      if (img && readImg) readImg(img);
     });
   }
   function eqBar(field, small) {
@@ -185,9 +193,24 @@
     eb.addEventListener('mousedown', function (ev) { ev.preventDefault(); });   // keep the caret where it is
     eb.addEventListener('click', function () { openEq(field); });
     field.addEventListener('dblclick', function () { if (mathAt(field, field.selectionStart || 0)) openEq(field); });
+    if (OCR) field.addEventListener('paste', function (ev) {   // pasting a picture of an equation opens the editor and reads it
+      var it = [].slice.call((ev.clipboardData || {}).items || []).filter(function (x) { return x.kind === 'file' && /^image\//.test(x.type); })[0];
+      if (it && !field.disabled) { ev.preventDefault(); openEq(field, it.getAsFile()); }
+    });
   }
   eqBar(ab); if (ti && ti.tagName === 'TEXTAREA') eqBar(ti, true);
   [ti, ab, au, kw].forEach(function (el2) { if (el2) el2.addEventListener('input', marks); });
+  if (ti && ti.tagName === 'TEXTAREA') ti.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') ev.preventDefault(); });   // a title is one line
+  // unsaved changes: say so next to the Save button, and warn before leaving the page (the speaker form has its own guard)
+  if (!f.hasAttribute('data-guard')) {
+    var snap = function () { return [ti, ab, au, kw].map(function (x) { return x ? x.value : ''; }).join('\u0001'); }, base = null, dirty = false, saving = false;
+    var bar2 = f.querySelector('.sbtns'), note = document.createElement('span'); note.className = 'unsaved'; note.hidden = true; note.textContent = T('Unsaved changes');
+    if (bar2) bar2.appendChild(note);
+    setTimeout(function () { base = snap(); }, 0);
+    f.addEventListener('input', function () { if (base === null) return; dirty = snap() !== base; note.hidden = !dirty; });
+    f.addEventListener('submit', function () { saving = true; });
+    addEventListener('beforeunload', function (e) { if (dirty && !saving) { e.preventDefault(); e.returnValue = ''; } });
+  }
   if (au) new MutationObserver(marks).observe(au, { attributes: true, attributeFilter: ['value'] });
   count(); preview();
 })();

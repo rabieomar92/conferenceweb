@@ -1492,3 +1492,10 @@ html.eq-open{overflow:hidden}
 :root{--suggestion-zindex:1100;--keyboard-zindex:1050}
 .eqbar.sm{margin:0 0 8px}.eqbar.sm .eqbtn{min-height:38px;padding:6px 12px!important;font-size:15px}
 .eqpos[hidden]{display:none}
+.sbtns{flex-wrap:wrap;align-items:center}
+.savehint{flex-basis:100%;margin:2px 0 0!important;font-size:14px}
+.unsaved{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#B45309}
+.unsaved::before{content:"";width:8px;height:8px;border-radius:50%;background:#D97706}
+.unsaved[hidden]{display:none}
+.eqdlg .eqmsg.err{background:none;border:0;padding:0;margin:6px 0 0;font-size:inherit;color:#B91C1C}
+.scard .inmsg{margin:4px 0 18px}

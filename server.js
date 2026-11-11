@@ -659,11 +659,11 @@ async function sendPdf(res, list, name, opts = {}) {
 }
 router.post('/account/presentation', requireReg, (req, res) => {
   const r = req.reg, b = req.body || {};
-  if (!csrfOk(req)) { flash(req, '', 'Your session expired; your changes were not saved. Please try again.'); return res.redirect(cfg.base + '/account#presentation'); }
+  if (!csrfOk(req)) { flash(req, '', 'Your session expired; your changes were not saved. Please try again.'); return res.redirect(cfg.base + '/account#stage-abs'); }
   if (!parts.presenting(r)) { flash(req, '', 'Choose “Oral presentation” or “Poster presentation” in your profile first.'); return res.redirect(cfg.base + '/account#profile'); }
-  if (SUB.closed(cfg.absDeadline)) { flash(req, '', 'The abstract deadline has passed, so the abstract can no longer be changed. Please email the organisers.'); return res.redirect(cfg.base + '/account#presentation'); }
+  if (SUB.closed(cfg.absDeadline)) { flash(req, '', 'The abstract deadline has passed, so the abstract can no longer be changed. Please email the organisers.'); return res.redirect(cfg.base + '/account#stage-abs'); }
   const { v, errors } = SUB.validateAbstract(b, { mathCheck });
-  if (errors.length) { flash(req, '', errors); req.session.prform = { paper_title: v.paper_title, abstract: v.abstract, keywords: v.keywords, authors: v.authors }; return res.redirect(cfg.base + '/account#presentation'); }
+  if (errors.length) { flash(req, '', errors); req.session.prform = { paper_title: v.paper_title, abstract: v.abstract, keywords: v.keywords, authors: v.authors }; return res.redirect(cfg.base + '/account#stage-abs'); }
   db.prepare("UPDATE registrations SET paper_title=?, coauthors=?, authors=?, abstract=?, keywords=?, pres_at=?, abs_status=CASE WHEN abs_status='revise' THEN '' ELSE abs_status END WHERE id=?").run(v.paper_title, v.coauthors, v.authors, v.abstract, v.keywords, new Date().toISOString(), r.id);
   const left = SUB.absChecklist({ ...r, ...v }, r.full_name).filter((x) => !x[1]).map((x) => x[0]);
   flash(req, left.length ? `Saved. Still needed before the abstract is complete: ${left.join(', ')}.` : 'Your abstract has been saved.'); res.redirect(cfg.base + '/account#stage-abs');
