@@ -1483,3 +1483,12 @@ dialog.eqdlg{width:min(760px,calc(100vw - 24px))}
 .eqpos label{display:inline-flex;align-items:center;gap:8px;font-size:16px;cursor:pointer}
 .eqsrc summary{cursor:pointer;color:var(--navy);font-weight:700;font-size:15px}
 .eqsrc textarea{width:100%;box-sizing:border-box;margin-top:8px;font:14px/1.5 ui-monospace,Menlo,Consolas,monospace;padding:10px;border:1px solid var(--rule)}
+/* equation dialog is non-modal (so MathLive's suggestions, menu and keyboard can sit above it) */
+dialog.eqdlg[open]{z-index:900}
+.eqshade{position:fixed;inset:0;background:rgba(10,20,56,.45);z-index:899}
+.eqshade[hidden]{display:none}
+html.eq-open{overflow:hidden}
+
+:root{--suggestion-zindex:1100;--keyboard-zindex:1050}
+.eqbar.sm{margin:0 0 8px}.eqbar.sm .eqbtn{min-height:38px;padding:6px 12px!important;font-size:15px}
+.eqpos[hidden]{display:none}
