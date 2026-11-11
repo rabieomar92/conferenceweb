@@ -93,7 +93,7 @@
     if (window.MathfieldElement) return cb();
     var s = document.createElement('script'); s.src = B + '/assets/mathlive/mathlive.min.js';
     s.onload = function () { try { window.MathfieldElement.fontsDirectory = B + '/assets/mathlive/fonts'; window.MathfieldElement.soundsDirectory = null; } catch (e) { /* defaults */ } cb(); };
-    s.onerror = function () { alert(T('The equation editor could not be loaded. Please check your connection.')); };
+    s.onerror = function () { var m = T('The equation editor could not be loaded. Please check your connection.'); if (window.ui) ui.alert(m); else alert(m); };
     document.head.appendChild(s);
   }
   function mathAt(el, pos) {   // the $…$ / $$…$$ that contains the cursor

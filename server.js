@@ -1470,6 +1470,7 @@ if (cfg.googleVerifyFile && /^google[a-z0-9]+\.html$/i.test(cfg.googleVerifyFile
 }
 
 app.get((cfg.base || '') + '/assets/institutions.json', inst.serve);        // gzip-compressed list (≈90 KB)
+app.use((cfg.base || '') + '/assets/flatpickr', express.static(path.join(path.dirname(require.resolve('flatpickr')), ''), { maxAge: '30d', index: false }));   // date and time pickers
 app.use((cfg.base || '') + '/assets/mathlive', express.static(path.dirname(require.resolve('mathlive')), { maxAge: '30d', index: false }));   // visual equation editor
 app.use((cfg.base || '') + '/assets/katex', express.static(path.join(path.dirname(require.resolve('katex/package.json')), 'dist'), { maxAge: '30d', index: false }));   // equation preview
 app.use(cfg.base || '/', express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));

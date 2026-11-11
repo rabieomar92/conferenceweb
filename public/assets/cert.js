@@ -132,7 +132,7 @@ let stop=false; const stopbtn=document.getElementById('stopbtn'), allbtn=documen
 stopbtn.onclick=()=>{stop=true;st.textContent='Stopping after the current certificate…'};
 const pad=n=>String(n).padStart(4,'0');
 allbtn.onclick=async()=>{
-  if(total>CH&&!confirm('This will download '+Math.ceil(total/CH).toLocaleString('en-US')+' ZIP files ('+CH+' certificates each) one after another. Your browser may ask to allow multiple downloads. Continue?'))return;
+  if(total>CH&&!await ui.confirm('This will download '+Math.ceil(total/CH).toLocaleString('en-US')+' ZIP files ('+CH+' certificates each) one after another. Your browser may ask to allow multiple downloads. Continue?',{ok:'Download all'}))return;
   stop=false; stopbtn.hidden=false; allbtn.disabled=true;
   const parts=Math.ceil(total/CH); let after=0, part=0, done=0;
   try{

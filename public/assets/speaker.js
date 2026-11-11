@@ -59,7 +59,7 @@
       if (key() === orig || q('sched_ok').value === '1') return;
       e.preventDefault(); last = d.activeElement;
       var n = key().split('|'), o = orig.split('|'), clear = !n[0] && !n[1] && !n[2];
-      if (!clear && (!n[0] || !n[1])) { alert((window.T||{})['Please choose both a date and a start time, or leave the schedule empty.']||'Please choose both a date and a start time, or leave the schedule empty.'); return; }
+      if (!clear && (!n[0] || !n[1])) { var mm = (window.T||{})['Please choose both a date and a start time, or leave the schedule empty.']||'Please choose both a date and a start time, or leave the schedule empty.'; if (window.ui) ui.alert(mm); else alert(mm); return; }
       md.querySelector('#mdlT').textContent = clear ? 'Remove the schedule?' : (o[0] ? 'Change this talk time?' : 'Set this talk time?');
       md.querySelector('.mdl-who').textContent = sf.getAttribute('data-spk') + (clear ? ' will no longer have a date and time on the website.' : ' will be shown on the website with this schedule.');
       md.querySelector('[data-d]').textContent = clear ? '—' : (lab[n[0]] || n[0]); md.querySelector('[data-t]').textContent = clear ? '—' : span(n) + (q('slot_venue') ? ' · ' + q('slot_venue').options[q('slot_venue').selectedIndex].text : '');
@@ -75,7 +75,7 @@
     });
   }
   // confirm dangerous forms
-  d.querySelectorAll('form[data-confirm]').forEach(function (x) { x.addEventListener('submit', function (e) { if (!confirm(x.getAttribute('data-confirm'))) e.preventDefault(); }); });
+  if (!window.ui) d.querySelectorAll('form[data-confirm]').forEach(function (x) { x.addEventListener('submit', function (e) { if (!confirm(x.getAttribute('data-confirm'))) e.preventDefault(); }); });
   // photo
   var box = d.querySelector('.pbox'); if (!box) return;
   var ep = box.getAttribute('data-endpoint'), csrf = box.getAttribute('data-csrf'), msg = box.querySelector('.pmsg'), inp = box.querySelector('input[type=file]');
@@ -94,7 +94,7 @@
     var r = d.querySelector('.chk .ring'); if (!r || p == null) return; r.style.setProperty('--p', p); r.querySelector('b').textContent = p + '%';
     var li = d.querySelector('.chk li'); if (li) li.classList.toggle('ok', !!ph.querySelector('img'));
   }
-  function removeIt() { if (confirm((window.T||{})['Remove the photo?']||'Remove the photo?')) { say('Removing…'); post({ remove: true }); } }
+  function removeIt() { var q = (window.T||{})['Remove the photo?']||'Remove the photo?'; (window.ui ? ui.confirm(q, { danger: true, ok: (window.T||{})['Remove']||'Remove' }) : Promise.resolve(confirm(q))).then(function (y) { if (y) { say('Removing…'); post({ remove: true }); } }); }
   function post(body) {
     body.csrf = csrf;
     return fetch(ep, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

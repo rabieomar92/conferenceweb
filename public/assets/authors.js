@@ -104,7 +104,7 @@
       var i;
       if (b.hasAttribute('data-up')) { i = +b.getAttribute('data-up'); S.a.splice(i - 1, 0, S.a.splice(i, 1)[0]); }
       else if (b.hasAttribute('data-dn')) { i = +b.getAttribute('data-dn'); S.a.splice(i + 1, 0, S.a.splice(i, 1)[0]); }
-      else if (b.hasAttribute('data-rm')) { i = +b.getAttribute('data-rm'); if (!confirm(T('Remove this author?') + '\n' + S.a[i].n)) return; S.a.splice(i, 1); if (S.a.length && !S.a.some(function (y) { return y.p; })) S.a[0].p = 1; }
+      else if (b.hasAttribute('data-rm')) { i = +b.getAttribute('data-rm'); var who = S.a[i]; (window.ui ? ui.confirm(T('Remove this author?') + '\n' + who.n, { danger: true, ok: T('Remove') }) : Promise.resolve(confirm(T('Remove this author?') + '\n' + who.n))).then(function (y) { if (!y) return; var k = S.a.indexOf(who); if (k < 0) return; S.a.splice(k, 1); if (S.a.length && !S.a.some(function (z) { return z.p; })) S.a[0].p = 1; save(); render(); }); return; }
       else return;
       save(); render();
     });
