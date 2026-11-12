@@ -763,7 +763,7 @@ const spkSignIn = (req, res, s, welcome) => {
 router.get('/speaker/login', (req, res) => (currentSpeaker(req) ? res.redirect(cfg.base + '/speaker') : html(res, spv.login({ csrf: csrfToken(req), email: String(req.query.email || '').slice(0, 160) }))));
 router.post('/speaker/login', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160), password = String(req.body.password || '');
-  const again = (err, status = 400) => html(res, spv.login({ csrf: csrfToken(req), email, err }), status);
+  const again = (err, status = 400, pw = true) => html(res, spv.login({ csrf: csrfToken(req), email, err, pw }), status);
   if (!csrfOk(req)) return again('Your session expired. Please try again.');
   if (!EMAIL_RE.test(email) || !password) return again('Please enter your email address and password.');
   const key = normaliseEmail(email), keys = ['e:' + key, 'i:' + ipHash(req)];
@@ -772,7 +772,7 @@ router.post('/speaker/login', async (req, res) => {
   const s = speakers.byEmailKey(key);
   if (!(await speakers.verifyPassword(s, password))) {
     speakers.fail(keys);
-    return again('That email and password do not match. If you have not chosen a password yet, use the Accept invitation button in your invitation email, or reset your password.', 401);
+    return again('That email and password do not match. You can also sign in without a password: use “Email me a sign-in code”.', 401, true);
   }
   speakers.clearFails(['e:' + key]);
   if (PW.legacy(s.pw_hash)) PW.hash(password).then((h) => db.prepare('UPDATE speakers SET pw_hash=? WHERE id=? AND pw_hash=?').run(h, s.id, s.pw_hash)).catch(() => {});   // upgrade old bcrypt hash
@@ -781,7 +781,8 @@ router.post('/speaker/login', async (req, res) => {
 router.get('/speaker/forgot', (req, res) => html(res, spv.forgot({ csrf: csrfToken(req), email: String(req.query.email || '').slice(0, 160) })));
 router.post('/speaker/forgot', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);
-  const again = (err, status = 400) => html(res, spv.forgot({ csrf: csrfToken(req), email, err }), status);
+  const reset = req.body.mode === 'reset';                               // from “Forgot your password?”; otherwise the code simply signs the speaker in
+  const again = (err, status = 400) => html(res, reset ? spv.forgot({ csrf: csrfToken(req), email, err }) : spv.login({ csrf: csrfToken(req), email, err }), status);
   if (!csrfOk(req)) return again('Your session expired. Please try again.');
   if (!EMAIL_RE.test(email)) return again('Please enter a valid email address.');
   const key = normaliseEmail(email);
@@ -792,19 +793,19 @@ router.post('/speaker/forgot', async (req, res) => {
     const code = genCode();
     db.prepare('INSERT INTO speaker_codes (email_key,code_hash,expires_at,attempts,sends,last_sent) VALUES (?,?,?,0,1,?) ON CONFLICT(email_key) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, attempts=0, sends=sends+1, last_sent=excluded.last_sent')
       .run(key, codeHash('spk:' + key, code), t + cfg.codeMinutes * 60, t);
-    try { const m = mail.speakerCodeEmail({ name: s.full_name, code }); mail.send({ to: s.email, subject: m.subject, text: m.text, html: m.html }).catch((ex) => console.error('Speaker reset email failed:', ex.message)); }   // not awaited: same response time for every address
+    try { const m = mail.speakerCodeEmail({ name: s.full_name, code, reset }); mail.send({ to: s.email, subject: m.subject, text: m.text, html: m.html }).catch((ex) => console.error('Speaker reset email failed:', ex.message)); }   // not awaited: same response time for every address
     catch (ex) { console.error('Speaker reset email failed:', ex.message); }
   }
-  req.session.spl = { key, masked: maskEmail(email), t };
+  req.session.spl = { key, masked: maskEmail(email), t, reset: reset ? 1 : 0 };
   res.redirect(cfg.base + '/speaker/verify');
 });
 router.get('/speaker/verify', (req, res) => {
   const l = req.session.spl; if (!l) return res.redirect(cfg.base + '/speaker/forgot');
-  html(res, spv.code({ csrf: csrfToken(req), masked: l.masked }));
+  html(res, spv.code({ csrf: csrfToken(req), masked: l.masked, reset: !!l.reset }));
 });
 router.post('/speaker/verify', (req, res) => {
   const l = req.session.spl; if (!l) return res.redirect(cfg.base + '/speaker/forgot');
-  const again = (err) => html(res, spv.code({ csrf: csrfToken(req), masked: l.masked, err }), 400);
+  const again = (err) => html(res, spv.code({ csrf: csrfToken(req), masked: l.masked, err, reset: !!l.reset }), 400);
   if (!csrfOk(req)) return again('Your session expired. Please try again.');
   const row = db.prepare('SELECT * FROM speaker_codes WHERE email_key=?').get(l.key);
   const code = String(req.body.code || '').replace(/\D/g, '');
@@ -813,7 +814,8 @@ router.post('/speaker/verify', (req, res) => {
   if (code.length !== 6 || !safeEq(codeHash('spk:' + l.key, code), row.code_hash)) { const left = cfg.maxCodeAttempts - row.attempts - 1; return again(left > 0 ? `That code is not correct. ${left} attempt${left === 1 ? '' : 's'} left.` : 'Too many incorrect attempts. Please request a new code.'); }
   const s = speakers.byEmailKey(l.key); db.prepare('DELETE FROM speaker_codes WHERE email_key=?').run(l.key);
   if (!s) return again('This speaker account no longer exists. Please contact the organisers.');
-  req.session = { sprs: { id: s.id, t: nowS() }, csrf: crypto.randomBytes(24).toString('hex') };     // the code proves the mailbox; it only unlocks choosing a new password
+  if (!l.reset) { speakers.clearFails(['e:' + l.key]); if (!s.accepted_at) speakers.accept(s.id); return spkSignIn(req, res, speakers.byId(s.id)); }   // the code proves the mailbox
+  req.session = { sprs: { id: s.id, t: nowS() }, csrf: crypto.randomBytes(24).toString('hex') };
   res.redirect(cfg.base + '/speaker/reset');
 });
 const resetOf = (req) => { const r = req.session.sprs; return r && nowS() - r.t < 900 ? speakers.byId(r.id) : null; };
@@ -827,10 +829,10 @@ router.post('/speaker/reset', async (req, res) => {
   await speakers.setPassword(s.id, pw); speakers.clearFails(['e:' + normaliseEmail(s.email || '')]);
   spkSignIn(req, res, speakers.byId(s.id), 'Your password has been changed.');
 });
-// invitation links (from the email): Accept → choose a password; Decline → confirm
+// invitation links (from the email): Accept → one confirmation, no password; Decline → confirm
 const inviteOf = (req, res) => {
   const s = speakers.byInvite(req.params.token);
-  if (!s) { html(res, spv.notice({ h: 'This link is<br><em>no longer valid.</em>', p: 'The invitation link was already used, has expired (links last ' + speakers.INVITE_DAYS + ' days) or was replaced by a newer one. If you have already accepted, just sign in; otherwise ask the organisers to send a new invitation.', link: cfg.base + '/speaker/login', label: 'Go to sign-in' }), 410); return null; }
+  if (!s) { html(res, spv.notice({ h: 'This link is<br><em>no longer valid.</em>', p: 'The invitation link was already used, has expired (links last ' + speakers.INVITE_DAYS + ' days) or was replaced by a newer one. If you have already accepted, sign in with your email address and we will send you a code; otherwise ask the organisers to send a new invitation.', link: cfg.base + '/speaker/login', label: 'Go to sign-in' }), 410); return null; }
   return s;
 };
 router.get('/speaker/invite/:token', (req, res) => {
@@ -841,10 +843,9 @@ router.post('/speaker/invite/:token/accept', async (req, res) => {
   const s = inviteOf(req, res); if (!s) return;
   const again = (err) => html(res, spv.accept({ csrf: csrfToken(req), s, token: req.params.token, err }), 400);
   if (!csrfOk(req)) return again('Your session expired. Please try again.');
-  const pw = String(req.body.password || ''), err = pw !== String(req.body.confirm || '') ? 'The two passwords do not match.' : speakers.checkPassword(pw, s);
-  if (err) return again(err);
-  await speakers.setPassword(s.id, pw);
-  spkSignIn(req, res, speakers.byId(s.id), 'Thank you for accepting. Please add your talk title, abstract, biography and photo below.');
+  speakers.accept(s.id);
+  mail.send({ to: cfg.smtp.replyTo, subject: `Speaker accepted: ${s.full_name}`, text: `${s.full_name} <${s.email}> accepted the invitation to speak at ${cfg.eventName} as ${s.role}.` }).catch((ex) => console.error('Accept notice failed:', ex.message));
+  spkSignIn(req, res, speakers.byId(s.id), 'Thank you for accepting. You are signed in; there is no password to remember. Please add your talk title, abstract, biography and photo when you are ready.');
 });
 router.post('/speaker/invite/:token/decline', (req, res) => {
   const s = inviteOf(req, res); if (!s) return;
@@ -941,7 +942,7 @@ router.post('/admin/speakers/:id/invite', requireAdmin, admSpeaker, async (req, 
   const s = req.spk;
   if (!s.email) { flash(req, '', 'Add a sign-in email for this speaker first.'); return res.redirect(cfg.base + '/admin/speakers'); }
   try {
-    if (speakers.state(s) === 'active') { flash(req, '', 'This speaker has already accepted and has a password.'); return res.redirect(cfg.base + '/admin/speakers'); }
+    if (speakers.state(s) === 'active') { flash(req, '', 'This speaker has already accepted. They sign in with a code sent to their email.'); return res.redirect(cfg.base + '/admin/speakers'); }
     const token = speakers.issueInvite(s.id), link = `${views.SITE}/speaker/invite/${token}`;
     const m = mail.speakerInviteEmail({ name: s.full_name, role: s.role, acceptLink: link, declineLink: link + '?a=decline', days: speakers.INVITE_DAYS });
     const sending = mail.send({ to: s.email, subject: m.subject, text: m.text, html: m.html });
@@ -1155,7 +1156,7 @@ function certSource(q) {
 const SCH = require('./lib/schedule');
 router.get('/admin/programme', requireAdmin, (req, res) => {
   const list = SCH.entries();
-  html(res, adminViews.programme({ list, venues: SCH.venues(), use: SCH.venueUse(), clash: SCH.clashes(list), days: cfg.eventDays || [], dayLabel: cfg.eventDayLabel, liveOn: !!SCH.publicDays(), csrf: csrfToken(req), flash: takeFlash(req) }));
+  html(res, adminViews.programme({ list, venues: SCH.venues(), days: cfg.eventDays || [], dayLabel: cfg.eventDayLabel, liveOn: !!SCH.publicDays(), csrf: csrfToken(req), flash: takeFlash(req) }));
 });
 const progBack = (res, v) => res.redirect(cfg.base + '/admin/programme' + (v && v.slot_date ? '#d' + (cfg.eventDays || []).indexOf(v.slot_date) : v ? '#un' : ''));
 router.post('/admin/programme/save', requireAdmin, (req, res) => {
@@ -1199,6 +1200,20 @@ router.post('/admin/programme/save', requireAdmin, (req, res) => {
   const list = SCH.entries(), key = (type === 'item' ? 'item-' : type + '-') + (id || db.prepare('SELECT MAX(id) m FROM prog_items').get().m), c = SCH.clashes(list).get(key);
   flash(req, `Saved ${who}.${v.slot_ok ? ' It is on the website programme.' : v.slot_date ? ' It is not on the website yet.' : ''}${note}`, c ? [`Room clash: ${SCH.venueName(v.slot_venue)} already has ${c.type === 'item' ? c.title : c.who} at ${c.slot_start}${c.slot_end ? '–' + c.slot_end : ''}.`] : []);
   progBack(res, v);
+});
+// drag-and-drop on the timetable: only day, time and room change; publishing and emails stay with the dialog
+router.post('/admin/programme/move', express.json({ limit: '20kb' }), requireAdmin, (req, res) => {
+  if (!csrfHeader(req)) return res.status(400).json({ ok: false, error: 'Your session expired. Please reload the page.' });
+  const b = req.body || {}, m = /^(spk|reg|item)-(\d+)$/.exec(String(b.key || ''));
+  if (!m) return res.status(400).json({ ok: false, error: 'Unknown entry.' });
+  const T = { spk: 'speakers', reg: 'registrations', item: 'prog_items' }[m[1]], okCol = m[1] === 'item' ? 'ok' : 'slot_ok', id = +m[2];
+  const rec = db.prepare(`SELECT * FROM ${T} WHERE id=?`).get(id);
+  if (!rec) return res.status(404).json({ ok: false, error: 'That entry no longer exists. Please reload the page.' });
+  const on = b.slot_date && b.slot_start;
+  const { v, errors } = SCH.readSlot({ slot_date: b.slot_date, slot_start: on ? b.slot_start : '', slot_end: on ? b.slot_end : '', slot_venue: b.slot_venue, slot_ok: on && b.slot_ok === '1' ? '1' : '0' });
+  if (errors.length) return res.status(400).json({ ok: false, error: errors[0] });
+  db.prepare(`UPDATE ${T} SET slot_date=?, slot_start=?, slot_end=?, slot_venue=?, ${okCol}=? WHERE id=?`).run(v.slot_date || null, v.slot_start || null, v.slot_end || null, v.slot_venue, v.slot_ok, id);
+  res.json({ ok: true });
 });
 router.post('/admin/programme/import', requireAdmin, (req, res) => {
   if (csrfOk(req)) { const n = SCH.importSample(); flash(req, `${n} items copied from the sample programme as drafts. Check them, change what you need, then show each day on the website.`); }

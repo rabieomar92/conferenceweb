@@ -101,6 +101,15 @@
     while ((m = re.exec(el.value))) { if (pos > m.index && pos < m.index + m[0].length) return { s: m.index, e: m.index + m[0].length, t: m[0] }; }
     return null;
   }
+  var BOX = '<i class="bx"></i>';
+  var PAL = [
+    ['Build', [
+      ['<span class="fr"><i>a</i><i>b</i></span>', '\\frac{#@}{#?}', 'Fraction', 1], ['x<sup>' + BOX + '</sup>', '#@^{#?}', 'Power'], ['x<sub>' + BOX + '</sub>', '#@_{#?}', 'Subscript'],
+      ['√' + BOX, '\\sqrt{#@}', 'Square root'], ['(' + BOX + ')', '\\left(#@\\right)', 'Brackets'], ['|' + BOX + '|', '\\left|#@\\right|', 'Absolute value'],
+      ['Σ', '\\sum_{#?}^{#?}', 'Sum'], ['∫', '\\int_{#?}^{#?}', 'Integral'], ['x̄', '\\bar{#@}', 'Mean (bar)'], ['x⃗', '\\vec{#@}', 'Vector'], ['Abc', '\\mathrm{#@}', 'Upright text, for units and chemical formulas', 1]]],
+    ['Greek', 'α:alpha β:beta γ:gamma δ:delta ε:epsilon θ:theta λ:lambda μ:mu ν:nu π:pi ρ:rho σ:sigma τ:tau φ:phi χ:chi ψ:psi ω:omega Γ:Gamma Δ:Delta Θ:Theta Λ:Lambda Σ:Sigma Φ:Phi Ω:Omega'.split(' ').map(function (p) { var q = p.split(':'); return [q[0], '\\' + q[1], q[1]]; })],
+    ['Symbols', [['±', '\\pm', 'Plus or minus'], ['×', '\\times', 'Times'], ['÷', '\\div', 'Divided by'], ['·', '\\cdot', 'Dot'], ['≤', '\\le', 'Less than or equal'], ['≥', '\\ge', 'Greater than or equal'], ['≠', '\\ne', 'Not equal'], ['≈', '\\approx', 'Approximately'], ['∝', '\\propto', 'Proportional to'], ['→', '\\rightarrow', 'Arrow'], ['∞', '\\infty', 'Infinity'], ['°', '^{\\circ}', 'Degree'], ['∂', '\\partial', 'Partial derivative'], ['∇', '\\nabla', 'Nabla'], ['ħ', '\\hbar', 'h-bar'], ['Å', '\\text{Å}', 'Ångström']]]
+  ];
   var readImg = null, fld = ab, dlg = null, shade = null, mf, src, msg, target = null, sel = [0, 0];
   function inert(on) { [].forEach.call(document.body.children, function (n) { if (n !== dlg && n !== shade && !/^(SCRIPT|STYLE)$/.test(n.tagName) && !/ML__/.test(n.className || '')) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); }
   function strip(t) { var d = /^\$\$|^\\\[/.test(t); return { d: d, l: t.replace(/^\$\$|\$\$$|^\\\[|\\\]$|^\\\(|\\\)$|^\$|\$$/g, '').trim() }; }
@@ -108,17 +117,29 @@
     dlg = document.createElement('dialog'); dlg.className = 'au-dlg eqdlg'; dlg.setAttribute('aria-labelledby', 'eqT');
     dlg.innerHTML = '<form method="dialog" class="au-f" novalidate><div class="au-hd"><h3 id="eqT">' + T('Equation') + '</h3><button type="button" class="au-x" aria-label="' + T('Close') + '"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button></div>' +
       '<div class="au-bd">' +
-      '<p class="hint eqhint">' + T('Type the equation as you would write it. Use the keyboard button for symbols. Shortcuts: / makes a fraction, ^ a power, _ a subscript; type alpha, beta, sqrt or int for the symbol.') + '</p>' +
       '<math-field class="eqmf" aria-label="' + T('Equation') + '"></math-field>' +
-      (OCR ? '<div class="eqocr" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg><div><b>' + T('Have it as a picture?') + '</b><span>' + T('Paste a screenshot of the equation here (Ctrl+V) or') + ' <label class="eqpick">' + T('choose an image') + '<input type="file" accept="image/png,image/jpeg,image/webp" hidden></label>. ' + T('We will turn it into an equation you can edit.') + '</span><span class="eqmsg" role="status"></span></div></div>' : '') +
-      '<fieldset class="eqpos"><legend class="l">' + T('Where should it go?') + '</legend><label><input type="radio" name="eqd" value="0" checked> ' + T('Inside the sentence') + '</label><label><input type="radio" name="eqd" value="1"> ' + T('On its own line') + '</label></fieldset>' +
-      '<details class="eqsrc"><summary>' + T('LaTeX code (optional)') + '</summary><textarea rows="3" spellcheck="false" aria-label="LaTeX"></textarea></details>' +
-      '</div><div class="au-ft"><button type="button" class="b2 eqc">' + T('Cancel') + '</button><button type="button" class="b2 pri eqok">' + T('Insert equation') + '</button></div></form>';
+      '<div class="eqpal" role="group" aria-label="' + T('Symbols') + '">' + PAL.map(function (g) {
+        return '<div class="eqrow"><span class="eqcap">' + T(g[0]) + '</span><div class="eqkeys">' + g[1].map(function (k) { return '<button type="button" class="eqk' + (k[3] ? ' w' : '') + '" data-tex="' + esc(k[1]) + '" title="' + esc(T(k[2])) + '" aria-label="' + esc(T(k[2])) + '">' + k[0] + '</button>'; }).join('') + '</div></div>';
+      }).join('') + '</div>' +
+      (OCR ? '<div class="eqocr" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg><div><span><label class="eqpick">' + T('Use a picture of the equation') + '<input type="file" accept="image/png,image/jpeg,image/webp" hidden></label> ' + T('or paste a screenshot here.') + '</span><span class="eqmsg" role="status"></span></div></div>' : '') +
+      '</div><div class="au-ft"><label class="eqline"><input type="checkbox" class="eqd"> ' + T('Put it on its own line') + '</label><button type="button" class="b2 eqc">' + T('Cancel') + '</button><button type="button" class="b2 pri eqok">' + T('Insert equation') + '</button></div></form>';
     shade = document.createElement('div'); shade.className = 'eqshade'; shade.hidden = true; document.body.appendChild(shade); document.body.appendChild(dlg);
-    mf = dlg.querySelector('math-field'); src = dlg.querySelector('.eqsrc textarea'); msg = dlg.querySelector('.eqmsg');
-    try { mf.mathVirtualKeyboardPolicy = 'auto'; mf.smartFence = true; } catch (e) { /* older engine */ }
-    mf.addEventListener('input', function () { src.value = mf.value; });
-    src.addEventListener('input', function () { mf.value = src.value; });
+    mf = dlg.querySelector('math-field'); src = { value: '' }; msg = dlg.querySelector('.eqmsg');
+    // keep it simple: no MathLive menu, no separate on-screen keyboard; the buttons below cover what abstracts need
+    try { mf.mathVirtualKeyboardPolicy = 'manual'; mf.smartFence = true; mf.menuItems = []; mf.popoverPolicy = 'off'; } catch (e) { /* older engine */ }
+    // Tab after the last empty box selects a whole group in MathLive, and the next key would wipe it; step past it instead
+    mf.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Tab' || ev.shiftKey) return;
+      setTimeout(function () { try { var r = mf.selection.ranges[0]; if (r && r[0] !== r[1] && mf.getValue(r[0], r[1], 'latex').indexOf('placeholder') < 0) mf.position = Math.max(r[0], r[1]); } catch (e) { /* ignore */ } }, 0);
+    }, true);
+    dlg.querySelector('.eqpal').addEventListener('mousedown', function (ev) { if (ev.target.closest('.eqk')) ev.preventDefault(); });   // keep the cursor in the equation
+    dlg.querySelector('.eqpal').addEventListener('click', function (ev) {
+      var k = ev.target.closest('.eqk'); if (!k) return;
+      // Tab past the last box leaves the field; coming back must add to the equation, never replace it
+      if (!mf.hasFocus || !mf.hasFocus()) { mf.focus(); try { mf.executeCommand('moveToMathfieldEnd'); } catch (e) { /* ignore */ } }
+      try { mf.executeCommand(['insert', k.getAttribute('data-tex'), { focus: true, selectionMode: 'placeholder' }]); } catch (e) { mf.insert(k.getAttribute('data-tex')); }
+      mf.focus();
+    });
     // a non-modal dialog with our own backdrop: MathLive's suggestion list, menu and keyboard live in <body>
     // and would be hidden behind a modal dialog's top layer
     var close = function () { try { window.mathVirtualKeyboard.hide(); } catch (e) { /* none */ } dlg.close(); shade.hidden = true; document.documentElement.classList.remove('eq-open'); inert(false); fld.focus(); };
@@ -129,7 +150,7 @@
     dlg.querySelector('.au-x').addEventListener('click', close); dlg.querySelector('.eqc').addEventListener('click', close);
     dlg.addEventListener('cancel', function () { try { window.mathVirtualKeyboard.hide(); } catch (e) { /* none */ } });
     dlg.querySelector('.eqok').addEventListener('click', function () {
-      var l = (mf.value || '').trim(), disp = dlg.querySelector('input[name=eqd]:checked').value === '1';
+      var l = (mf.value || '').trim(), disp = dlg.querySelector('.eqd').checked;
       var t = l ? (disp ? '$$' + l + '$$' : '$' + l + '$') : '';
       var a = target ? target.s : sel[0], b = target ? target.e : sel[1];
       if (!t && !target) return close();
@@ -173,8 +194,8 @@
     mathlive(function () {
       if (!dlg) build();
       var x = target ? strip(target.t) : { d: false, l: '' };
-      var one = fld !== ab; dlg.querySelector('.eqpos').hidden = one;   // a title takes equations inside the line only
-      dlg.querySelector('input[name=eqd][value="' + (x.d && !one ? 1 : 0) + '"]').checked = true;
+      var one = fld !== ab; dlg.querySelector('.eqline').hidden = one;   // a title takes equations inside the line only
+      dlg.querySelector('.eqd').checked = !!(x.d && !one);
       dlg.querySelector('.eqok').textContent = T(target ? 'Update equation' : 'Insert equation');
       if (msg) { msg.textContent = ''; msg.className = 'eqmsg'; }
       shade.hidden = false; document.documentElement.classList.add('eq-open'); inert(true); dlg.show();
@@ -185,7 +206,7 @@
   function eqBar(field, small) {
     if (!field) return;
     var tb = document.createElement('div'); tb.className = 'eqbar' + (small ? ' sm' : '');
-    tb.innerHTML = '<button type="button" class="b2 eqbtn"><span class="eqi" aria-hidden="true">∑</span><span class="eql">' + T('Insert equation') + '</span></button>' + (small ? '' : '<span class="hint">' + T('Write equations visually, no LaTeX needed') + (OCR ? ' · ' + T('or paste a picture of one') : '') + '</span>');
+    tb.innerHTML = '<button type="button" class="b2 eqbtn"><span class="eqi" aria-hidden="true">∑</span><span class="eql">' + T('Insert equation') + '</span></button>' + '';
     field.parentNode.insertBefore(tb, field);
     var eb = tb.querySelector('.eqbtn'), el = tb.querySelector('.eql');
     var upd = function () { el.textContent = T(mathAt(field, field.selectionStart || 0) ? 'Edit this equation' : 'Insert equation'); };

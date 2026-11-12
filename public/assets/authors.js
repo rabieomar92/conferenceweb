@@ -18,7 +18,7 @@
     var locked = box.hasAttribute('data-locked');
     var S; try { S = JSON.parse(input.value || '{}'); } catch (e) { S = {}; }
     S.a = Array.isArray(S.a) ? S.a : []; S.f = Array.isArray(S.f) ? S.f : [];
-    if (!S.a.length && me.n) { if (me.aff) S.f.push(me.aff); S.a.push({ n: me.n, e: me.e, f: me.aff ? [1] : [], p: 1, c: 1 }); }
+    if (!S.a.length && me.n) { if (me.aff) S.f.push(me.aff); S.a.push({ n: me.n, e: me.e, f: me.aff ? [1] : [], p: 1, c: 1, me: 1, ma: me.aff }); }
     // numbering: affiliations in order of first use
     function order() {
       var seen = []; S.a.forEach(function (x) { (x.f || []).forEach(function (k) { if (seen.indexOf(k) < 0) seen.push(k); }); });
@@ -34,7 +34,7 @@
       var used = {}; S.a.forEach(function (x) { x.f.forEach(function (k) { used[k] = 1; }); });
       var h = '<ol class="au-list">' + S.a.map(function (x, i) {
         return '<li class="au-row"><div class="au-who"><b>' + esc(x.n) + '</b><sup>' + esc(x.f.join(',') + (x.c ? '*' : '')) + '</sup>' +
-          (x.p ? '<span class="au-tag">' + T('Presenting') + '</span>' : '') + (x.c ? '<span class="au-tag c">' + T('Corresponding') + '</span>' : '') +
+          (x.me ? '<span class="au-tag me">' + T('You') + '</span>' : '') + (x.p ? '<span class="au-tag">' + T('Presenting') + '</span>' : '') + (x.c ? '<span class="au-tag c">' + T('Corresponding') + '</span>' : '') +
           '<small>' + (x.f.length ? x.f.map(function (k) { return esc(S.f[k - 1]); }).join(' · ') : '<i class="au-miss">' + T('No affiliation chosen') + '</i>') + (x.e ? ' · ' + esc(x.e) : '') + '</small></div>' +
           (locked ? '' : '<div class="au-act"><button type="button" class="au-ib" data-ed="' + i + '" aria-label="' + T('Edit') + ' ' + esc(x.n) + '" title="' + T('Edit') + '">' + ICON.edit + '</button>' +
           '<button type="button" class="au-ib" data-up="' + i + '" aria-label="' + T('Move up') + '" title="' + T('Move up') + '"' + (i ? '' : ' disabled') + '>' + ICON.up + '</button>' +
@@ -61,7 +61,8 @@
     var editing = -1, picks = [];
     function paintOpts() {
       opts.innerHTML = S.f.length ? S.f.map(function (t, i) {
-        return '<label class="au-opt"><input type="checkbox" value="' + (i + 1) + '"' + (picks.indexOf(i + 1) > -1 ? ' checked' : '') + '><span>' + esc(t) + '</span><button type="button" class="au-ib" data-fe="' + i + '" aria-label="' + T('Edit affiliation') + '" title="' + T('Edit affiliation') + '">' + ICON.edit + '</button></label>';
+        var mine = editing > -1 && S.a[editing] && S.a[editing].me && S.a[editing].ma === t;
+        return '<label class="au-opt"><input type="checkbox" value="' + (i + 1) + '"' + (picks.indexOf(i + 1) > -1 ? ' checked' : '') + '><span>' + esc(t) + (mine ? ' <em class="au-prof">' + T('from your profile') + '</em>' : '') + '</span><button type="button" class="au-ib" data-fe="' + i + '" aria-label="' + T('Edit affiliation') + '" title="' + T('Edit affiliation') + '">' + ICON.edit + '</button></label>';
       }).join('') : '<p class="au-empty">' + T('No affiliations yet — add one below.') + '</p>';
     }
     opts.addEventListener('change', function (e) { var k = +e.target.value; if (!k) return; if (e.target.checked) { if (picks.indexOf(k) < 0) picks.push(k); } else picks = picks.filter(function (x) { return x !== k; }); });
@@ -92,7 +93,7 @@
       var msg = !x.n ? T('Please enter the author’s name.') : !x.f.length ? T('Please choose or add at least one affiliation.') : x.c && !x.e ? T('Please add an email address for the corresponding author.') : x.e && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(x.e) ? T('That email address does not look right.') : '';
       if (msg) { err.textContent = msg; err.hidden = false; return; }
       if (x.p) S.a.forEach(function (y) { y.p = 0; });
-      if (editing > -1) S.a[editing] = x; else S.a.push(x);
+      if (editing > -1) { if (S.a[editing].me) { x.me = 1; x.ma = S.a[editing].ma || ''; } S.a[editing] = x; } else S.a.push(x);
       if (!S.a.some(function (y) { return y.p; })) S.a[0].p = 1;
       save(); render(); close();
       var b = box.querySelector(editing > -1 ? '[data-ed="' + editing + '"]' : '.au-add'); if (b) b.focus();
