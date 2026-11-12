@@ -53,6 +53,7 @@
       '<label class="l" for="auE' + input.id + '">' + T('Email') + ' <span class="opt">' + T('(needed for the corresponding author)') + '</span></label><input id="auE' + input.id + '" type="email" maxlength="160" autocomplete="off">' +
       '<fieldset class="au-fs"><legend class="l">' + T('Affiliations') + '</legend><div class="au-opts"></div>' +
       '<div class="au-new"><input class="au-ni" maxlength="250" placeholder="' + T('Add a new affiliation, e.g. School of Physics, Universiti Sains Malaysia, Penang, Malaysia') + '" aria-label="' + T('New affiliation') + '"><button type="button" class="b2 au-na">' + T('Add') + '</button></div></fieldset>' +
+      '<label class="au-ck au-mel"><input type="checkbox" class="au-me"> ' + T('This is me (use the name and affiliation from my profile)') + '</label>' +
       '<label class="au-ck"><input type="checkbox" class="au-p"> ' + T('Presenting author (the person who presents at the conference)') + '</label>' +
       '<label class="au-ck"><input type="checkbox" class="au-c"> ' + T('Corresponding author') + '</label><p class="au-err" role="alert" hidden></p></div>' +
       '<div class="au-ft"><button type="button" class="b2 au-cancel">' + T('Cancel') + '</button><button type="submit" class="btn au-ok">' + T('Save author') + '</button></div></form>';
@@ -74,12 +75,19 @@
       inp.addEventListener('keydown', function (k) { if (k.key === 'Enter') { k.preventDefault(); done(); } if (k.key === 'Escape') { k.preventDefault(); k.stopPropagation(); paintOpts(); } });
       inp.addEventListener('blur', done);
     });
+    var meBox = dlg.querySelector('.au-me');
+    meBox.addEventListener('change', function () {
+      if (!meBox.checked) return;
+      if (!nm.value.trim()) nm.value = me.n; if (!em.value.trim()) em.value = me.e;
+      if (me.aff) { var k = S.f.indexOf(me.aff); if (k < 0) { S.f.push(me.aff); k = S.f.length - 1; } if (picks.indexOf(k + 1) < 0) picks.push(k + 1); paintOpts(); }
+    });
     function addAff() { var v = ni.value.replace(/\s+/g, ' ').trim(); if (!v) { ni.focus(); return; } var k = S.f.indexOf(v); if (k < 0) { S.f.push(v); k = S.f.length - 1; } if (picks.indexOf(k + 1) < 0) picks.push(k + 1); ni.value = ''; paintOpts(); ni.focus(); }
     dlg.querySelector('.au-na').onclick = addAff;
     ni.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addAff(); } });
     function open(i) {
       editing = i; var x = i > -1 ? S.a[i] : { n: '', e: '', f: S.f.length === 1 ? [1] : [], p: S.a.length ? 0 : 1, c: S.a.length ? 0 : 1 };
       dlg.querySelector('h3').textContent = i > -1 ? T('Edit author') : T('Add an author');
+      meBox.checked = !!x.me; dlg.querySelector('.au-mel').hidden = !me.n || S.a.some(function (y, k) { return y.me && k !== i; });
       nm.value = x.n; em.value = x.e || ''; picks = (x.f || []).slice(); dlg.querySelector('.au-p').checked = !!x.p; dlg.querySelector('.au-c').checked = !!x.c; err.hidden = true; ni.value = '';
       paintOpts(); dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', ''); setTimeout(function () { nm.focus(); }, 30);
     }
@@ -93,7 +101,8 @@
       var msg = !x.n ? T('Please enter the author’s name.') : !x.f.length ? T('Please choose or add at least one affiliation.') : x.c && !x.e ? T('Please add an email address for the corresponding author.') : x.e && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(x.e) ? T('That email address does not look right.') : '';
       if (msg) { err.textContent = msg; err.hidden = false; return; }
       if (x.p) S.a.forEach(function (y) { y.p = 0; });
-      if (editing > -1) { if (S.a[editing].me) { x.me = 1; x.ma = S.a[editing].ma || ''; } S.a[editing] = x; } else S.a.push(x);
+      if (meBox.checked) { x.me = 1; x.ma = (editing > -1 && S.a[editing].me && S.a[editing].ma) || me.aff || ''; }
+      if (editing > -1) S.a[editing] = x; else S.a.push(x);
       if (!S.a.some(function (y) { return y.p; })) S.a[0].p = 1;
       save(); render(); close();
       var b = box.querySelector(editing > -1 ? '[data-ed="' + editing + '"]' : '.au-add'); if (b) b.focus();

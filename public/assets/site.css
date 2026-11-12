@@ -1663,3 +1663,32 @@ body.admb details.adv>.grid{margin-top:22px}
 button.lnk{background:none;border:0;padding:0;font:inherit;color:var(--navy);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 button.lnk:hover{color:var(--amber)}
 @media(max-width:560px){.invd>div{grid-template-columns:1fr;gap:2px}.invb .btn,.invb .btn2,.invb form{width:100%;justify-content:center}}
+.au-ck[hidden]{display:none}
+
+/* ══ Design audit (Nov 2026) ══ */
+/* admin header on tablets: the Sign out button stays in the bar and the section tabs stay visible (it used to turn into a drop-down panel that hid them) */
+@media(max-width:980px){
+  body.admb .adm-hd .wrap{display:flex!important;flex-wrap:nowrap!important;align-items:center;justify-content:space-between;gap:10px}
+  body.admb .adm-hd nav{margin:0!important;padding:0!important;border:0!important;flex:none;display:flex!important;position:static!important;background:none!important;box-shadow:none!important;width:auto!important}
+  body.admb .adm-hd .menu-btn{display:none!important}
+}
+@media(max-width:760px){body.admb .adm-hd .admlbl{display:none}}
+/* header sign-out buttons: filled, like every other secondary button */
+.top nav button.pill,.top nav .n-act button.pill{background:#E8ECF4!important;border-color:#E8ECF4!important;color:var(--navy)!important;border-radius:3px;transition:background .15s}
+.top nav button.pill:hover,.top nav .n-act button.pill:hover{background:#D5DCEB!important;border-color:#D5DCEB!important}
+.top.portal nav button.pill{font-size:14px!important;font-weight:700;padding:0 16px!important;min-height:42px}
+/* show/hide password: readable and easy to hit */
+.pwtog{font:700 13px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif!important;color:var(--navy)!important;background:#EEF1F7!important;border-radius:3px;padding:8px 10px!important;right:4px}
+.pwtog:hover{background:#DDE3F0!important}
+/* sticky save bar never lets the form show through */
+.savebar{background:var(--paper,#F8F7F4)!important;box-shadow:0 -10px 18px -14px rgba(18,40,92,.35)}
+/* "Change your password": a proper disclosure row instead of the browser's triangle */
+details.pwd>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;background:#EEF1F7;color:var(--navy);font-weight:700;padding:13px 16px;border-radius:3px;transition:background .15s}
+details.pwd>summary::-webkit-details-marker{display:none}
+details.pwd>summary::after{content:"";width:9px;height:9px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin:-4px 4px 0 0;transition:transform .2s}
+details.pwd[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
+details.pwd>summary:hover{background:#DDE3F0}details.pwd[open]>summary{margin-bottom:18px}
+/* speakers list: action buttons line up whatever each row has */
+@media(min-width:1001px){.sl-row{grid-template-columns:64px minmax(0,1.3fr) minmax(0,1.6fr) 140px 150px 150px!important}.sl-row .acts{justify-content:flex-end}}
+.pwshow{font:700 13px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif!important;color:var(--navy)!important;background:#EEF1F7!important;border-radius:3px;padding:8px 10px!important;letter-spacing:0!important;text-transform:none!important}
+.pwshow:hover{background:#DDE3F0!important}

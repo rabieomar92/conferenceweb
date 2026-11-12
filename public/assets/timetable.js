@@ -10,8 +10,9 @@
   var mins = function (t) { var p = String(t).split(':'); return (+p[0]) * 60 + (+p[1]); };
   var hhmm = function (m) { m = Math.max(0, Math.min(1439, Math.round(m))); return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2); };
   var byKey = {}; E.forEach(function (x) { byKey[x.key] = x; });
-  var vName = function (id) { var v = V.filter(function (y) { return y.id === +id; })[0]; return v ? v.name : 'No room yet'; };
-  var isSched = function (x) { return !!(x.date && x.start); };
+  var vName = function (id) { var v = V.filter(function (y) { return y.id === +id; })[0]; return v ? v.name : 'General (no room set)'; };
+  var isSched = function (x) { return !!(x.date && x.start && DAYS.indexOf(x.date) >= 0); };   // a day that no longer exists counts as not scheduled
+  var durText = function (d) { return d < 60 ? d + ' min' : (d % 60 ? Math.floor(d / 60) + ' h ' + (d % 60) + ' min' : (d / 60) + ' h'); };
   var defDur = function (x) { return x.type === 'spk' ? (x.kind === 'plenary' ? 45 : 30) : x.type === 'reg' ? 20 : 30; };
   var durOf = function (x) { return x.end ? Math.max(5, mins(x.end) - mins(x.start)) : defDur(x); };
   var nameOf = function (x) { return x.type === 'item' ? x.title : x.who; };
@@ -33,14 +34,15 @@
     return out;
   }
 
+  var GRIP = '<svg class="tt-grip" viewBox="0 0 10 16" aria-hidden="true"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>';
   function card(x, c, inGrid) {
     var tags = '';
     if (inGrid) { if (c) tags += '<span class="tt-pill bad">Clash</span>'; else if (!x.ok) tags += '<span class="tt-pill">Draft</span>'; }
-    else { tags += '<span class="tt-pill">' + esc(x.label) + '</span>'; if (x.type === 'reg' && !x.acc) tags += '<span class="tt-pill warn">Abstract not accepted yet</span>'; }
+    else { tags += '<span class="tt-pill">' + esc(x.label) + '</span><span class="tt-pill">' + durText(defDur(x)) + '</span>'; if (x.type === 'reg' && !x.acc) tags += '<span class="tt-pill warn">Abstract not accepted yet</span>'; }
     var t = inGrid ? '<span class="tt-t">' + esc(x.start) + (x.end ? '–' + esc(x.end) : '') + (x.code ? ' · ' + esc(x.code) : '') + '</span>' : '';
     var sub = subOf(x);
     return '<div class="tt-card ' + cls(x) + (inGrid && !x.ok ? ' draft' : '') + (c ? ' clash' : '') + '" data-key="' + esc(x.key) + '" tabindex="0" role="button" title="' + esc(nameOf(x) + (sub ? ' — ' + sub : '') + (c ? ' (same room and time as ' + nameOf(c) + ')' : '')) + '">' +
-      t + '<b>' + esc(nameOf(x)) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + (tags ? '<span class="tt-tags">' + tags + '</span>' : '') + (inGrid ? '<i class="tt-rs" aria-hidden="true"></i>' : '') + '</div>';
+      (inGrid ? '' : GRIP) + t + '<b>' + esc(nameOf(x)) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + (tags ? '<span class="tt-tags">' + tags + '</span>' : '') + (inGrid ? '<i class="tt-rs" aria-hidden="true"></i>' : '') + '</div>';
   }
 
   // ── tray ──
@@ -66,9 +68,10 @@
     var H = Math.round((t1 - t0) * ppm);
     grid.style.setProperty('--n', cols.length); grid.style.setProperty('--ppm', ppm);
     var todays = E.filter(function (x) { return x.date === day && x.start; });
+    var focusKey = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('tt-card') && document.activeElement.closest('.tt-col') ? document.activeElement.getAttribute('data-key') : '';
     var head = '<div class="tt-head"><div class="tt-corner"></div>' + cols.map(function (c) {
       var n = todays.filter(function (x) { return (+x.venue || 0) === c.id; }).length;
-      return '<div class="tt-ch"><div><b>' + esc(c.name) + '</b><small>' + (c.details ? esc(c.details) + ' · ' : '') + n + (n === 1 ? ' entry' : ' entries') + '</small></div>' + (c.id ? '<button type="button" class="tt-ic" data-venue="' + c.id + '" aria-label="Edit venue ' + esc(c.name) + '" title="Edit venue">' + PEN + '</button>' : '') + '</div>'; }).join('') +
+      return '<div class="tt-ch" data-hv="' + c.id + '"><div><b>' + esc(c.name) + '</b><small>' + (c.details ? esc(c.details) + ' · ' : '') + n + (n === 1 ? ' entry' : ' entries') + '</small></div>' + (c.id ? '<button type="button" class="tt-ic" data-venue="' + c.id + '" aria-label="Edit venue ' + esc(c.name) + '" title="Edit venue">' + PEN + '</button>' : '') + '</div>'; }).join('') +
       '<button type="button" class="tt-addv" data-venue="0" title="Add a venue" aria-label="Add a venue">+</button></div>';
     var times = ''; for (var m = t0; m <= t1; m += 60) times += '<span style="top:' + Math.round((m - t0) * ppm) + 'px">' + hhmm(m % 1440 === 0 && m ? 1439 : m).replace('23:59', '24:00') + '</span>';
     var body = '<div class="tt-body" style="height:' + H + 'px"><div class="tt-times">' + times + '</div>' + cols.map(function (c) {
@@ -81,12 +84,15 @@
         var l = 0; while (l < lanes.length && lanes[l] > s) l++; lanes[l] = en; grp.push({ x: x, lane: l }); gEnd = Math.max(gEnd, en); });
       flush();
       return '<div class="tt-col' + (c.id ? '' : ' g') + '" data-v="' + c.id + '">' + out + '</div>'; }).join('') + '<div class="tt-pad"></div></div>';
-    grid.innerHTML = head + body;
+    grid.innerHTML = head + body + (todays.length ? '' : '<p class="tt-blank">Nothing on this day yet.<br>Drag a card from <b>To schedule</b> onto a room and time, or click an empty slot to add an event.</p>');
+    if (popKey) { var pc = grid.querySelector('[data-key="' + popKey + '"]'); if (pc) pc.classList.add('pop'); popKey = ''; }
+    if (focusKey) { var fc = grid.querySelector('[data-key="' + focusKey + '"]'); if (fc) fc.focus({ preventScroll: true }); }
     renderBar(cl);
   }
+  var popKey = '';
   function place(x, left, w, c) {
     var top = Math.round((mins(x.start) - t0) * ppm), h = Math.max(18, Math.round(durOf(x) * ppm) - 2);
-    return card(x, c, true).replace('class="tt-card', 'style="top:' + (top + 1) + 'px;height:' + h + 'px;left:calc(' + left + '% + 2px);width:calc(' + w + '% - 4px)" class="tt-card' + (h < 30 ? ' xs' : h < 50 ? ' sm' : ''));
+    return card(x, c, true).replace('class="tt-card', 'style="top:' + (top + 1) + 'px;height:' + h + 'px;left:calc(' + left + '% + 2px);width:calc(' + w + '% - 4px)" class="tt-card' + (h < 30 ? ' xs' : h < 50 ? ' sm' : '') + (w < 60 ? ' nar' : ''));
   }
 
   function renderBar(cl) {
@@ -114,24 +120,33 @@
     if (undo) toastEl.querySelector('button').onclick = function () { toastEl.remove(); undo(); };
     $('.tt-page').appendChild(toastEl); toastT = setTimeout(function () { if (toastEl) toastEl.remove(); }, err ? 9000 : 7000);
   }
+  var queue = Promise.resolve(), busy = 0;
+  function saving(d, failed) { busy = Math.max(0, busy + d); var el = $('#ttSave'); if (!el) return;
+    el.className = 'tt-save ' + (busy ? 'busy' : failed ? 'bad' : 'ok'); el.textContent = busy ? 'Saving…' : failed ? 'Not saved' : 'All changes saved'; }
+  window.addEventListener('beforeunload', function (ev) { if (busy) { ev.preventDefault(); ev.returnValue = ''; } });
   var snapOf = function (x) { return { date: x.date, start: x.start, end: x.end, venue: x.venue, ok: x.ok }; };
   function commit(x, n, canUndo) {
     var prev = snapOf(x);
     if (prev.date === n.date && prev.start === n.start && prev.end === n.end && (+prev.venue || 0) === (+n.venue || 0)) return;
     x.date = n.date; x.start = n.start; x.end = n.end; x.venue = +n.venue || 0; if (!isSched(x)) x.ok = 0; else if (n.ok !== undefined) x.ok = n.ok;
-    render();
-    fetch(B + '/admin/programme/move', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF': TT.csrf }, credentials: 'same-origin',
-      body: JSON.stringify({ key: x.key, slot_date: x.date, slot_start: x.start, slot_end: x.end, slot_venue: x.venue || '', slot_ok: x.ok ? '1' : '0' }) })
-      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'The server did not answer properly. Please reload the page.' }; }); })
+    var mine = snapOf(x), body = JSON.stringify({ key: x.key, slot_date: x.date, slot_start: x.start, slot_end: x.end, slot_venue: x.venue || '', slot_ok: x.ok ? '1' : '0' });
+    popKey = x.key; render(); saving(1);
+    // one save at a time, in order: a slow answer can never overwrite a newer move
+    queue = queue.then(function () { return fetch(B + '/admin/programme/move', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF': TT.csrf }, credentials: 'same-origin', body: body }); })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: r.status === 401 || r.redirected ? 'You have been signed out. Please reload the page and sign in.' : 'The server did not answer properly. Please reload the page.' }; }); })
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'Could not save.');
+        saving(-1);
         var what = nameOf(x), c = clashes()[x.key];
         var msg = !isSched(x) ? what + ' is back in the list.' : what + ' · ' + x.start + (x.end ? '–' + x.end : '') + ', ' + vName(x.venue) + '.';
         if (c) msg += ' Clashes with ' + nameOf(c) + '.';
         else if (x.sent && isSched(x) && x.type !== 'item') msg += ' The presenter was emailed an earlier time; open the card to email the new one.';
         toast(msg, canUndo === false ? null : function () { commit(x, prev, false); });
       })
-      .catch(function (ex) { x.date = prev.date; x.start = prev.start; x.end = prev.end; x.venue = prev.venue; x.ok = prev.ok; render(); toast('Not saved: ' + ex.message, null, true); });
+      .catch(function (ex) { saving(-1, true);
+        var cur = snapOf(x), same = cur.date === mine.date && cur.start === mine.start && cur.end === mine.end && cur.venue === mine.venue;
+        if (same) { x.date = prev.date; x.start = prev.start; x.end = prev.end; x.venue = prev.venue; x.ok = prev.ok; render(); }   // only undo our own change, not a newer one
+        toast('Not saved: ' + (ex.message === 'Failed to fetch' ? 'no connection to the server. Check your internet and try again.' : ex.message), null, true); });
   }
 
   // ── dragging ──
@@ -147,14 +162,16 @@
     if (drag.touch && navigator.vibrate) { try { navigator.vibrate(12); } catch (e) { /* ignore */ } }
     move(drag.ev);
   }
-  function clearPrev() { var p = $('.tt-prev'); if (p) p.remove(); tray.classList.remove('drop'); }
+  function clearPrev() { var p = $('.tt-prev'); if (p) p.remove(); p = $('.tt-now'); if (p) p.remove(); p = $('.tt-ch.on'); if (p) p.classList.remove('on'); tray.classList.remove('drop'); }
+  function mark(v, m) { var h = grid.querySelector('.tt-ch[data-hv="' + v + '"]'); if (h) h.classList.add('on'); var g = $('.tt-times'); if (g) { var b = document.createElement('i'); b.className = 'tt-now'; b.style.top = Math.round((m - t0) * ppm) + 'px'; b.textContent = hhmm(m); g.appendChild(b); } }
   function move(ev) {
     lastEv = ev; var x = drag.x;
     if (drag.mode === 'resize') {
       var col = drag.card.parentNode, r = col.getBoundingClientRect(), s = mins(x.start);
       var en = Math.max(s + 5, Math.min(t1, Math.round((t0 + (ev.clientY - r.top) / ppm) / 5) * 5));
       drag.end = hhmm(en); drag.card.style.height = Math.max(18, Math.round((en - s) * ppm) - 2) + 'px';
-      var t = drag.card.querySelector('.tt-t'); if (t) t.textContent = x.start + '–' + drag.end;
+      var t = drag.card.querySelector('.tt-t'); if (t) t.textContent = x.start + '–' + drag.end + ' · ' + durText(en - s);
+      clearPrev(); mark(+x.venue || 0, en);
       return;
     }
     drag.ghost.style.transform = 'translate(' + (ev.clientX + 14) + 'px,' + (ev.clientY + 12) + 'px) rotate(-1.5deg)';
@@ -163,7 +180,7 @@
       var rc = at.col.getBoundingClientRect(), d = durOf(x);
       var m = Math.round((t0 + (ev.clientY - rc.top - (drag.inGrid ? drag.oy : 14)) / ppm) / 5) * 5; m = Math.max(t0, Math.min(t1 - d, m));
       var p = document.createElement('div'); p.className = 'tt-prev'; p.style.top = Math.round((m - t0) * ppm) + 'px'; p.style.height = Math.max(22, Math.round(d * ppm)) + 'px'; p.textContent = hhmm(m) + '–' + hhmm(m + d);
-      at.col.appendChild(p); drag.target = { v: +at.col.getAttribute('data-v'), m: m, d: d };
+      at.col.appendChild(p); drag.target = { v: +at.col.getAttribute('data-v'), m: m, d: d }; mark(drag.target.v, m);
     } else if (at.tray && drag.inGrid) { tray.classList.add('drop'); drag.target = { un: true }; }
   }
   function autoScroll() {
@@ -253,6 +270,17 @@
     }
   });
   document.addEventListener('keydown', function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.classList && ev.target.classList.contains('tt-card')) { ev.preventDefault(); var x = byKey[ev.target.getAttribute('data-key')]; if (x) openSlot(x); } });
+  // arrow keys nudge the focused card: up/down 5 minutes, Shift + up/down changes the length, left/right changes room
+  document.addEventListener('keydown', function (ev) {
+    var c = ev.target; if (!c.classList || !c.classList.contains('tt-card') || !c.closest('.tt-col') || drag) return;
+    var k = ev.key; if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(k) < 0 || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    var x = byKey[c.getAttribute('data-key')]; if (!x) return; ev.preventDefault();
+    var s = mins(x.start), d = durOf(x), ids = [0].concat(V.map(function (v) { return v.id; })), vi = ids.indexOf(+x.venue || 0);
+    if (k === 'ArrowLeft' || k === 'ArrowRight') { vi = Math.max(0, Math.min(ids.length - 1, vi + (k === 'ArrowLeft' ? -1 : 1))); }
+    else if (ev.shiftKey) d = Math.max(5, Math.min(1440 - s, d + (k === 'ArrowUp' ? -5 : 5)));
+    else s = Math.max(0, Math.min(1440 - d, s + (k === 'ArrowUp' ? -5 : 5)));
+    commit(x, { date: x.date, start: hhmm(s), end: hhmm(s + d), venue: ids[vi] });
+  });
   // a quiet "+ 10:15" follows the mouse over empty space
   var hint = null;
   grid.addEventListener('mousemove', function (ev) {
@@ -264,12 +292,14 @@
   grid.addEventListener('mouseleave', function () { if (hint) { hint.remove(); hint = null; } });
   $('#ttQ').addEventListener('input', function () { query = this.value; renderTray(); });
 
-  function setDay(d) { if (DAYS.indexOf(d) < 0) return; day = d; try { history.replaceState(null, '', '#d' + DAYS.indexOf(d)); } catch (e) { /* ignore */ } renderGrid(); firstScroll(); }
+  function setDay(d) { if (DAYS.indexOf(d) < 0) return; day = d; try { history.replaceState(null, '', '#d' + DAYS.indexOf(d)); sessionStorage.setItem('tt-day', d); } catch (e) { /* ignore */ } renderGrid(); firstScroll(); }
   function setView(v) { main.setAttribute('data-view', v); [].forEach.call(document.querySelectorAll('.tt-sw button'), function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-view') === v); }); }
   function zoom(d) { var mid = (scroll.scrollTop + scroll.clientHeight / 2) / ppm; zi = Math.max(0, Math.min(ZOOMS.length - 1, zi + d)); ppm = ZOOMS[zi]; try { localStorage.setItem('tt-zoom', zi); } catch (e) { /* ignore */ } renderGrid(); scroll.scrollTop = mid * ppm - scroll.clientHeight / 2; }
   function firstScroll() { var a = null; E.forEach(function (x) { if (x.date === day && x.start) a = a === null ? mins(x.start) : Math.min(a, mins(x.start)); }); scroll.scrollTop = Math.max(0, ((a === null ? 510 : a) - t0 - 30) * ppm); }
 
   var h = (location.hash || '').slice(1), di = /^d(\d+)$/.exec(h);
-  if (di && DAYS[+di[1]]) day = DAYS[+di[1]];
+  if (di && DAYS[+di[1]]) day = DAYS[+di[1]]; else { try { var sdy = sessionStorage.getItem('tt-day'); if (sdy && DAYS.indexOf(sdy) >= 0) day = sdy; } catch (e) { /* ignore */ } }
+  try { sessionStorage.setItem('tt-day', day); } catch (e) { /* ignore */ }
+  if (!DAYS.length) { grid.innerHTML = '<p class="tt-blank">The conference dates are not set yet. Set them under Settings, then come back.</p>'; return; }
   render(); firstScroll(); setView(h === 'un' ? 'tray' : 'grid');
 })();
